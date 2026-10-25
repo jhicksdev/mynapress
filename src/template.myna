@@ -1,6 +1,7 @@
 @target(py)
 <re
 <pathlib:{Path}
+<.util:{DotDict, format_date, html_escape, safe_join, slugify, truncate_text}
 
 $Safe < str {
   @init(value:s) {
@@ -25,7 +26,7 @@ $$Token(kind:s, value:s, line:i)
   ? value === N {
     ^ ""
   }
-  ? isinstance(value, Safe) {
+  ? value :? Safe {
     ^ @str(value)
   }
   ? value :? b {
@@ -365,7 +366,7 @@ $$Token(kind:s, value:s, line:i)
       ? items === N {
         items = []
       }
-      ? isinstance(items, dict) {
+      ? items :? {s:A} {
         items = @list(items.items())
       }
       total = #items

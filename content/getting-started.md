@@ -5,20 +5,25 @@ title: Getting started
 ## Requirements
 
 - Python 3.11 or newer.
-- Myna 0.3.0. Install the language with `pipx install myna-lang` (or
-  `pip install myna-lang` in a virtual environment).
+- A current Myna 0.3.0 build with native `.myna` module resolution. Install the language
+  with `pipx install myna-lang`, or from the current Myna main branch until the next PyPI
+  release:
+
+  ```bash
+  pipx install "git+https://github.com/jhicksdev/myna.git@2ca0826"
+  ```
+
 - MynaPress itself. Clone this repository and run it from its root. No package install is
   needed for MynaPress: the source lives in `src/` and `bin/mynapress` is a convenience
   wrapper.
 
-If Myna is only available as a source checkout, put it on `PYTHONPATH` for every command:
+For a local Myna checkout, install it editable once and activate a virtual environment:
 
 ```bash
-export PYTHONPATH=/home/joseph/Projects/myna
+uv venv .venv
+uv pip install --python .venv/bin/python -e /path/to/myna
+source .venv/bin/activate
 ```
-
-This repository uses that convention in development and in the commands below when Myna
-is not installed globally.
 
 ## A minimal site
 
@@ -107,7 +112,7 @@ and participate in tag pages, pagination, and RSS.
 
 | Path | Purpose |
 | :--- | :--- |
-| `src/main.myna` | Entrypoint and small Myna module loader. |
+| `src/main.myna` | Thin entrypoint; imports and runs the CLI module. |
 | `src/util.myna` | Slugs, dates, escaping, hashing, pagination helpers. |
 | `src/config.myna` | `site.toml` loading and validation. |
 | `src/content.myna` | Discovery, front matter, `Page` model, URLs. |

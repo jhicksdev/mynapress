@@ -1,36 +1,59 @@
 @target(py)
-<sys, types
+<sys, types, importlib
 <pathlib:{Path}
-<myna:{myna_to_python}
+<myna.loader:{compile_myna_source, install}
 
-@load_module(name:s, base:Path, ns:{s:A})->{s:A} {
-  path = base / `{name}.myna`
-  src = path.read_text(encoding="utf-8")
-  code = myna_to_python(src)
-  exec(compile(code, @str(path), "exec"), ns)
-  ^ ns
+@public_names(module:A)->{s:A} {
+  result = {}
+  % name <- dir(module) {
+    ? name.startswith("_") {
+      ^>
+    }
+    value = getattr(module, name)
+    ? isinstance(value, types.ModuleType) {
+      ^>
+    }
+    result[name] = value
+  }
+  ^ result
 }
 
 @main {
   tests_dir = Path(__file__).resolve().parent
   root = tests_dir.parent
-  runtime = types.ModuleType("mynapress_test_runtime")
-  sys.modules["mynapress_test_runtime"] = runtime
-  ns = runtime.__dict__
-  ns["__file__"] = @str(root / "src" / "main.myna")
-  modules = ["util", "config", "content", "markdown", "template", "site", "server", "cli"]
-  % name <- modules {
-    load_module(name, root / "src", ns)
+  src_dir = root / "src"
+  package = "mynapress_src"
+  package_module = types.ModuleType(package)
+  package_module.__path__ = [@str(src_dir)]
+  package_module.__package__ = package
+  package_module.__file__ = @str(src_dir)
+  sys.modules[package] = package_module
+  finder = install(package, src_dir)
+  app = {}
+  !{
+    % name <- ["util", "config", "content", "markdown", "template", "site", "server", "cli"] {
+      module = importlib.import_module(`{package}.{name}`)
+      app.update(public_names(module))
+    }
+  } !! e {
+    p(`FAIL loading application modules: {type(e).__name__}: {e}`)
+    sys.meta_path.remove(finder)
+    sys.exit(1)
   }
 
   files = @srt([p | p <- tests_dir.glob("test_*.myna")], key=p => @str(p))
   passed = 0
   failed = 0
   % path <- files {
-    tns = {**ns, "__name__": path.stem, "__file__": @str(path)}
+    module_name = `mynapress_tests_{path.stem}`
+    test_module = types.ModuleType(module_name)
+    test_module.__file__ = @str(path)
+    test_module.__dict__.update(app)
+    sys.modules[module_name] = test_module
+    tns = test_module.__dict__
     source = path.read_text(encoding="utf-8")
     !{
-      exec(compile(myna_to_python(source), @str(path), "exec"), tns)
+      exec(compile(compile_myna_source(source, path), @str(path), "exec"), tns)
     } !! e {
       p(`FAIL {path.name} (load): {type(e).__name__}: {e}`)
       failed += 1
@@ -53,6 +76,7 @@
       }
     }
   }
+  sys.meta_path.remove(finder)
   p("")
   p(`{passed} passed, {failed} failed`)
   sys.exit(failed > 0 ? 1 : 0)

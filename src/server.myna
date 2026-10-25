@@ -2,6 +2,8 @@
 <threading, time, functools
 <pathlib:{Path}
 <http.server:{ThreadingHTTPServer, SimpleHTTPRequestHandler}
+<.config:{SiteConfig, site_path}
+<.site:{BuildResult, build_site}
 
 $SiteHandler < SimpleHTTPRequestHandler {
   @log_message(format:s, *args) {

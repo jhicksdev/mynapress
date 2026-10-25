@@ -22,11 +22,13 @@ committed; CI builds it.
 ## Requirements and installation
 
 - Python 3.11 or newer.
-- Myna 0.3.0.
+- A current Myna 0.3.0 build with multi-file `.myna` module resolution (`myna run` must
+  support sibling imports such as `<.util:{slugify}`).
 
 ```bash
 pipx install myna-lang
-# or: python -m pip install myna-lang==0.3.0
+# or, until the next PyPI release includes the module loader:
+pipx install "git+https://github.com/jhicksdev/myna.git@2ca0826"
 ```
 
 Clone this repository and run from its root:
@@ -35,31 +37,18 @@ Clone this repository and run from its root:
 myna run src/main.myna build
 ```
 
-MynaPress does not need to be installed as a package. The `bin/mynapress` wrapper is a
-developer convenience for machines where Myna lives in a source checkout:
+MynaPress does not need to be installed as a package. If you are working from a local Myna
+checkout, install it editable once:
 
 ```bash
-export MYNA_SRC=/home/joseph/Projects/myna   # optional; this is the default
-bin/mynapress build
+uv venv .venv
+uv pip install --python .venv/bin/python -e /path/to/myna
+source .venv/bin/activate
+myna run src/main.myna build
 ```
 
-The wrapper sets `PYTHONPATH` to the Myna source tree and invokes:
-
-```bash
-python3 -m myna run src/main.myna "$@"
-```
-
-Use one convention consistently. If Myna is installed with `pipx`, use `myna run ...`
-directly. If you are working from the local Myna checkout, use:
-
-```bash
-export PYTHONPATH=/home/joseph/Projects/myna
-python3 -m myna run src/main.myna build
-```
-
-> Local editable installs of the Myna source tree currently fail because setuptools
-> discovers both `myna/` and `skills/` as top-level packages. That is recorded as G1 in
-> `GAPS.md`. The released wheel works in CI.
+The `bin/mynapress` wrapper is a developer convenience. It prefers `myna` on `PATH`, then
+the repository `.venv`, then `MYNA_SRC` with `python3 -m myna`.
 
 ## Quick start
 
@@ -274,10 +263,6 @@ is a shell convenience wrapper and the CI workflow is YAML.
 
 ```bash
 # tests (Myna test harness)
-export PYTHONPATH=/home/joseph/Projects/myna
-python3 -m myna run tests/run_tests.myna
-
-# the same with an installed Myna
 myna run tests/run_tests.myna
 
 # build both fixture sites
@@ -295,13 +280,31 @@ fixture builds, drafts, tags, expected output, MIME types, 404s, and CLI cleanup
 
 ### Architecture
 
-`src/main.myna` is the entrypoint and loader. It loads `util`, `config`, `content`,
-`markdown`, `template`, `site`, `server`, and `cli`, then dispatches argv.
+`src/main.myna` is a thin entrypoint:
 
-Myna 0.3.0 cannot import `.myna` modules and `myna run` executes with `__main__` semantics,
-so the application uses a small Myna loader built on the public `myna_to_python` compiler.
-This is a workaround for a real language gap, documented as G2/G3 in `GAPS.md`. Modules share
-one runtime namespace.
+```myna
+@target(py)
+<sys
+<.cli:{run_cli}
+
+@main {
+  sys.exit(run_cli(sys.argv[1:]))
+}
+```
+
+Each responsibility lives in its own module, and modules use ordinary Myna relative
+imports:
+
+```myna
+# src/content.myna
+<.util:{DotDict, parse_date, reading_time, slugify}
+```
+
+`myna run` resolves those imports lazily from `src/`, so modules have real namespaces,
+normal Python tooling works, and the tests can import or inspect them independently. The
+loader workaround used during the Myna 0.3.0 evaluation has been removed now that upstream
+Myna supports sibling `.myna` modules; the history and the four original reproductions are
+in `GAPS.md`.
 
 ## Known limitations
 
@@ -312,7 +315,7 @@ one runtime namespace.
 - Raw HTML is trusted and passed through.
 - Tag pages are not paginated.
 - No feeds/sitemap unless `base_url` is configured.
-- Custom module loader (see above).
+- Requires a Myna build with native `.myna` module resolution (current main / next release).
 - No committed generated HTML. CI builds the docs.
 
 More detail is in the generated docs under `content/limitations.md` and in `GAPS.md`.

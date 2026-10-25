@@ -10,17 +10,18 @@ processing, templates, HTTP, and tests without needing a framework.
 
 The useful output is not just a working site generator. It is the list of things that were
 surprising, awkward, or impossible in Myna 0.3.0. Those findings live in `GAPS.md`, with
-minimal reproductions, expected versus actual behaviour, and the workaround used here.
+minimal reproductions, expected versus actual behaviour, and their upstream resolution.
 
 The short version:
 
 - Dataclasses, pattern matching, comprehensions, and error handling are pleasant and
   compact.
-- The lack of a `.myna` module import mechanism is the biggest architectural tax. We use a
-  small loader built on the public compiler.
-- Compound runtime type checks (`x :? [s]`) produce invalid Python; `isinstance` is the
-  workaround.
-- Editable installs from the Myna source tree fail under setuptools' flat-layout
-  discovery because of the `skills/` directory.
+- The missing `.myna` module import mechanism was the biggest architectural tax. Myna now
+  resolves sibling modules natively, and MynaPress uses ordinary relative imports.
+- Compound runtime type checks (`x :? [s]`) used to produce invalid Python. They now work,
+  so the content model uses them directly.
+- Editable installs from the Myna source tree failed under setuptools' flat-layout
+  discovery because of the `skills/` directory. The Myna packaging was fixed.
 
-None of that is hidden. The project is meant to be a fair report from the field.
+The first pass still shipped with the workarounds. The final code exercises the fixed
+behaviour instead of hiding it, and `GAPS.md` keeps the historical reproductions.

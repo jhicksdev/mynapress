@@ -3,6 +3,11 @@
 <pathlib:{Path}
 <datetime:{datetime, timezone}
 <dataclasses:{field}
+<.config:{SiteConfig, site_path}
+<.content:{Page, discover, sort_posts}
+<.markdown:{render_markdown}
+<.template:{as_safe, render_template}
+<.util:{DotDict, html_escape, output_relpath, plain_summary, rfc822_date, slugify, url_for, xml_escape}
 
 $$BuildResult(
   pages:i,

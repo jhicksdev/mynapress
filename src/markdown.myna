@@ -1,5 +1,6 @@
 @target(py)
 <re
+<.util:{html_escape}
 
 @escape_attr(value:s)->s {
   ^ html_escape(value)

@@ -5,7 +5,7 @@ title: Architecture
 MynaPress keeps responsibilities in separate `.myna` modules:
 
 ```text
-src/main.myna      entrypoint + module loader
+src/main.myna      entrypoint
 src/cli.myna       argv parsing and command dispatch
 src/config.myna    site.toml + validation
 src/content.myna   discovery, front matter, Page model
@@ -16,24 +16,34 @@ src/server.myna    http.server + polling watch
 src/util.myna      slugs, dates, escaping, pagination helpers
 ```
 
-## Why a custom loader?
+## Module imports
 
-Myna 0.3.0 compiles relative imports to Python relative imports. `myna run` executes the
-compiled code with `__main__` semantics and no package, and Python cannot import `.myna`
-files. There is no source-relative module graph in the language.
-
-Rather than put the whole application in one enormous file, `src/main.myna` compiles each
-module with the public Myna compiler and executes it into one shared runtime namespace:
+`src/main.myna` is deliberately thin:
 
 ```myna
-src = path.read_text(encoding="utf-8")
-code = myna_to_python(src)
-exec(compile(code, @str(path), "exec"), ns)
+@target(py)
+<sys
+<.cli:{run_cli}
+
+@main {
+  sys.exit(run_cli(sys.argv[1:]))
+}
 ```
 
-The tests use the same technique. This is a workaround for a real language gap, documented
-in `GAPS.md`. It also means modules share one global namespace rather than proper module
-objects.
+Modules use normal Myna relative imports rooted at the entry file's directory:
+
+```myna
+# src/content.myna
+<.util:{DotDict, parse_date, reading_time, slugify}
+```
+
+`myna run` resolves each `.myna` file lazily and caches it in `sys.modules`. That gives real
+module namespaces and ordinary Python tooling. It also lets the test harness import each
+module directly instead of executing everything into one shared dictionary.
+
+The first MynaPress build used a custom exec-based loader because Myna 0.3.0 could not
+resolve sibling `.myna` modules. That workaround is gone. The original gap reports and
+their upstream fixes are recorded in `GAPS.md`.
 
 ## Data flow
 
@@ -46,8 +56,9 @@ objects.
 
 ## Tests
 
-`tests/run_tests.myna` loads the application modules, discovers `test_*.myna` files, and
-runs every `test_*` function. It prints `PASS`/`FAIL` with the assertion detail and exits
-non-zero on failure. Coverage includes slugs and traversal, front matter, Markdown blocks
-and inlines, escaping, template filters and layouts, errors, dates, pagination, feeds,
-fixture builds, drafts, MIME types, 404s, and CLI cleanup.
+`tests/run_tests.myna` installs a scoped finder for `src/`, imports the application
+modules, discovers `test_*.myna` files, and runs every `test_*` function. It prints
+`PASS`/`FAIL` with the assertion detail and exits non-zero on failure. Coverage includes
+slugs and traversal, front matter, Markdown blocks and inlines, escaping, template filters
+and layouts, errors, dates, pagination, feeds, fixture builds, drafts, MIME types, 404s,
+and CLI cleanup.

@@ -1,6 +1,15 @@
 #!/bin/sh
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if command -v myna >/dev/null 2>&1; then
+  exec myna run "$ROOT/src/main.myna" "$@"
+fi
+
+if [ -x "$ROOT/.venv/bin/myna" ]; then
+  exec "$ROOT/.venv/bin/myna" run "$ROOT/src/main.myna" "$@"
+fi
+
 MYNA_SRC=${MYNA_SRC:-/home/joseph/Projects/myna}
 export PYTHONPATH="$MYNA_SRC${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m myna run "$ROOT/src/main.myna" "$@"

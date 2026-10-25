@@ -2,6 +2,7 @@
 <re
 <pathlib:{Path}
 <dataclasses:{field}
+<.util:{DotDict, parse_date, reading_time, slugify}
 
 $$Page(
   title:s,
@@ -142,10 +143,10 @@ $$Page(
     ^ []
   }
   value = fields["tags"]
-  ? isinstance(value, list) {
+  ? value :? [s] {
     ^ [@str(tag).strip() | tag <- value ? @str(tag).strip() != ""]
   }
-  ? isinstance(value, str) {
+  ? value :? s {
     ^ [t.strip() | t <- value.split(",") ? t.strip() != ""]
   }
   ^ []

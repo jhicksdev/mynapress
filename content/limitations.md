@@ -24,9 +24,9 @@ MynaPress v0.1 is deliberately small. These are the known limitations, stated pl
 - **Tag pages are not paginated.** They list all posts for a tag.
 - **No feed unless `base_url` is set.** Absolute URLs are required for a valid feed and
   sitemap, so those files are omitted when no base URL is configured.
-- **Custom module loader.** Because Myna cannot import `.myna` modules, the application
-  loads modules into a shared namespace. See [Architecture](/architecture/) and
-  `GAPS.md` for the reproductions.
+- **Requires the current Myna module loader.** MynaPress uses native `.myna` module
+  imports, so it needs a Myna build with sibling module resolution (current main or the next
+  release). Older single-file 0.3.0 builds cannot run it.
 - **No committed build output.** The documentation site is generated in CI (or locally
   with `myna run src/main.myna build`); generated HTML is not committed.
 
