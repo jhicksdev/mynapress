@@ -1,8 +1,16 @@
 # Myna gaps found while building MynaPress
 
-Reproductions are against Myna 0.3.0 at `/home/joseph/Projects/myna`.
+Reproductions were originally filed against Myna 0.3.0. All four entries below were
+re-checked against Myna `main` at `2ca0826` (2026-10-24).
 
-## G1. Editable install fails from the source tree
+| Gap | Status |
+| :-- | :-- |
+| G1. Editable install fails | **Fixed** in `04a699c` |
+| G2. No import mechanism for `.myna` modules | **Fixed** in `2ca0826` |
+| G3. `dataclass` fails under `exec` | **Not a Myna defect** (CPython behaviour) |
+| G4. Compound types in `:?` | **Fixed** in `04a699c` |
+
+## G1. Editable install fails from the source tree — fixed
 
 **Severity:** painful (local development only)
 
@@ -12,20 +20,21 @@ python3 -m pip install -e /home/joseph/Projects/myna
 
 **Expected:** installs `myna-lang` and the `myna` console script.
 
-**Actual:** setuptools flat-layout discovery sees both `myna/` and `skills/` and aborts:
+**Actual (0.3.0):** setuptools flat-layout discovery saw both `myna/` and `skills/` and
+aborted:
 
 ```text
 error: Multiple top-level packages discovered in a flat-layout: ['myna', 'skills'].
 ```
 
-A plain `uv pip install -e` fails the same way. This host also lacks `pip`/`ensurepip`.
+**Resolution:** `pyproject.toml` now declares `packages = ["myna", "myna.backends",
+"myna.frontends"]`. Verified with a clean `uv venv` + `uv pip install -e .`; the `myna`
+console script works. The `PYTHONPATH=/home/joseph/Projects/myna` fallback is no longer
+needed for local development.
 
-**Workaround:** run Myna from its source tree with `PYTHONPATH=/home/joseph/Projects/myna`.
-MynaPress documents this convention. CI installs the released wheel instead.
+## G2. No import mechanism for `.myna` application modules — fixed
 
-## G2. No import mechanism for `.myna` application modules
-
-**Severity:** painful (blocks the suggested module layout)
+**Severity:** painful (blocked the suggested module layout)
 
 ```myna
 # main.myna
@@ -37,28 +46,32 @@ p(slugify("Hello"))
 **Expected:** either the compiler bundles/executes `util.myna`, or `myna run` supports a
 source-relative module graph.
 
-**Actual:** the compiler emits Python `from .util import slugify`. `myna run` executes the
-compiled code with `__name__ = "__main__"` and no package context, so Python cannot resolve
-the import. Even a plain `import util` would look for `util.py`, never `util.myna`.
-There is no documented loader hook.
+**Actual (0.3.0):** the compiler emitted Python `from .util import slugify`, but `myna run`
+executed the compiled code with `__name__ = "__main__"` and no package context, so Python
+could not resolve the import. Even a plain `import util` looked for `util.py`, never
+`util.myna`. There was no documented loader hook.
 
-Reproduction:
+**Resolution:** `myna run` now installs a scoped import hook (`myna/loader.py`) rooted at
+the entry file's directory:
 
-```bash
-cd /tmp/opencode/relpkg   # main.myna above; helper.py is irrelevant
-PYTHONPATH=/home/joseph/Projects/myna python3 -m myna run main.myna
-# ImportError: attempted relative import with no known parent package
-```
+- `<.util:{f}` → `util.myna` beside the entry file.
+- `<.pkg.mod:{f}` → `pkg/mod.myna`; `pkg` may have `__init__.myna` or act as a namespace
+  directory.
+- Parent-relative imports (`<..util:{f}`) work from inside subpackages.
+- Modules are compiled lazily on first import and cached through `sys.modules`.
+- Absolute imports keep their normal Python meaning.
+- Lex/parse errors in imported files now name the originating `.myna` path.
 
-**Workaround:** MynaPress keeps each responsibility in a separate `.myna` file but loads
-them through a small Myna bootstrap (`src/main.myna`) that compiles each source with
-`myna_to_python` and `exec`s it into one shared namespace. Tests use the same technique.
-This is a real architectural tax: modules share one global namespace and cannot be
-imported by ordinary Python tooling.
+MynaPress can therefore drop its exec-into-one-namespace bootstrap and use ordinary
+`.myna` modules, restoring module isolation and normal Python tooling.
 
-## G3. `dataclass` creation fails when `exec` is used with an unregistered module
+**Remaining limits:** `myna compile` is still per-file (its relative imports expect a real
+Python package), and `myna run -t js` is single-file. `myna bundle` covers the
+single-artifact case for Python.
 
-**Severity:** painful (only for loaders, REPLs, and test harnesses)
+## G3. `dataclass` creation fails when `exec` is used with an unregistered module — not a Myna defect
+
+**Severity:** informational (loaders, REPLs, test harnesses)
 
 ```myna
 @target(py)
@@ -76,13 +89,15 @@ exec(compile(myna_to_python("$$P(x:i)"), "demo", "exec"), ns)
 AttributeError: 'NoneType' object has no attribute '__dict__'
 ```
 
-Python's `dataclasses` resolves annotations through `sys.modules[cls.__module__]`; the
-module is not registered. This is fallout from the custom loader required by G2.
+**Analysis:** this reproduces identically in plain Python. `dataclasses` resolves string
+annotations through `sys.modules.get(cls.__module__).__dict__`; the module is not
+registered, so the lookup returns `None`. Registering the module first fixes it — which is
+what MynaPress's loader already does. With the G2 fix, `myna run` registers every module it
+loads, so the original failure no longer occurs in that path.
 
-**Workaround:** MynaPress creates a real `types.ModuleType("mynapress_runtime")`, registers
-it in `sys.modules`, and executes all compiled modules into its `__dict__`.
+This was fallout from the custom loader G2 required, not a language defect.
 
-## G4. Compound types in `:?` compile to invalid Python
+## G4. Compound types in `:?` compile to invalid Python — fixed
 
 **Severity:** painful
 
@@ -94,10 +109,13 @@ value = ["a"]
 }
 ```
 
-**Expected:** `isinstance(value, list[str])` (or a runtime-checkable equivalent) works.
+**Expected:** a runtime check that `value` is a list.
 
-**Actual:** Myna emits `isinstance(value, [s])`, which raises `NameError: name 's' is not
-defined`. The same shape appears for `{s:A}`.
+**Actual (0.3.0):** Myna emitted `isinstance(value, [s])`, raising
+`NameError: name 's' is not defined`. `{s:A}` and `{i}` failed the same way, and the JS
+target emitted `x instanceof [s]`, which throws at runtime.
 
-**Workaround:** use Python's `isinstance(value, list)` / `isinstance(value, dict)` from Myna
-code. This is less precise but works at runtime.
+**Resolution:** `:?` now checks the runtime origin type — `[T]` → `list`,
+`{K:V}` → `dict`, `{T}` → `set`, `Name[T]` → `Name` — in both backends. A tuple of types
+remains a union (`x :? (i, s)` is `isinstance(x, (int, str))`), now documented in `SPEC.md`
+and the Myna skill. Covered by Python and cross-target JS tests.
