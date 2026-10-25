@@ -1,0 +1,323 @@
+# MynaPress
+
+A small, dependency-free static site generator written **entirely in Myna**.
+
+MynaPress takes Markdown with front matter and produces a fast, self-contained HTML site
+with collections, tags, pagination, RSS, a sitemap, a dev server, and watch mode. It has
+zero runtime dependencies beyond [`myna-lang`](https://pypi.org/project/myna-lang/) and the
+Python standard library.
+
+It is also a dogfooding experiment: the project exists to test whether Myna 0.3.0 is ready
+for real work. The friction found along the way is documented in [`GAPS.md`](GAPS.md), not
+hidden.
+
+## Status
+
+v0.1 targets Python 3.11+ only. Every source file declares `@target(py)`. There is no
+pretend JavaScript/Node support. Builds are full rebuilds; see [Limitations](#known-limitations).
+
+The documentation site in `content/` is built by MynaPress itself. Generated HTML is not
+committed; CI builds it.
+
+## Requirements and installation
+
+- Python 3.11 or newer.
+- Myna 0.3.0.
+
+```bash
+pipx install myna-lang
+# or: python -m pip install myna-lang==0.3.0
+```
+
+Clone this repository and run from its root:
+
+```bash
+myna run src/main.myna build
+```
+
+MynaPress does not need to be installed as a package. The `bin/mynapress` wrapper is a
+developer convenience for machines where Myna lives in a source checkout:
+
+```bash
+export MYNA_SRC=/home/joseph/Projects/myna   # optional; this is the default
+bin/mynapress build
+```
+
+The wrapper sets `PYTHONPATH` to the Myna source tree and invokes:
+
+```bash
+python3 -m myna run src/main.myna "$@"
+```
+
+Use one convention consistently. If Myna is installed with `pipx`, use `myna run ...`
+directly. If you are working from the local Myna checkout, use:
+
+```bash
+export PYTHONPATH=/home/joseph/Projects/myna
+python3 -m myna run src/main.myna build
+```
+
+> Local editable installs of the Myna source tree currently fail because setuptools
+> discovers both `myna/` and `skills/` as top-level packages. That is recorded as G1 in
+> `GAPS.md`. The released wheel works in CI.
+
+## Quick start
+
+```bash
+# build the bundled documentation site into ./build
+myna run src/main.myna build
+
+# build the fixture site with an explicit config
+myna run src/main.myna build --config fixtures/site/site.toml
+
+# serve and rebuild on changes
+myna run src/main.myna serve --watch
+
+# create content
+myna run src/main.myna new "My first post"
+```
+
+A minimal site needs `site.toml`, `content/`, and `templates/`:
+
+```text
+site.toml
+content/
+  index.md
+templates/
+  page.html
+assets/
+  style.css
+```
+
+```toml
+# site.toml
+title = "My Site"
+description = "Notes and things."
+base_url = "https://example.com"   # optional; enables RSS/sitemap/robots
+paginate = 10
+```
+
+```html
+<!-- templates/page.html -->
+<!doctype html>
+<html lang="{{ site.language }}">
+<head><meta charset="utf-8"><title>{{ page.title }}</title></head>
+<body>
+  <h1>{{ page.title }}</h1>
+  {{ content | safe }}
+</body>
+</html>
+```
+
+## CLI
+
+```bash
+myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]
+myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]
+myna run src/main.myna new "Post title" [--config site.toml]
+myna run src/main.myna clean [--config site.toml]
+```
+
+- `build` prints a concise summary: pages, posts, tag pages, assets, warnings, duration.
+- `serve` builds first, serves `--out` with `http.server`, uses stdlib MIME types, returns
+  404 for unknown paths, and `--watch` polls for changes and rebuilds.
+- `new` writes `content/YYYY-MM-DD-<slug>.md` with front matter and avoids overwriting.
+- `clean` removes the output directory and `.mynapress-cache.json`.
+- Content/config/template errors exit non-zero with `error: file:line: message`, not a raw
+  traceback.
+- Unknown commands exit 2.
+
+## Content model
+
+Markdown files are discovered recursively in `content/`. Only `.md` is read. Nested folders
+are allowed for organisation; URLs are currently flat (`/<slug>/`, or `/` for `index.md`).
+
+### Front matter: supported YAML subset
+
+Front matter starts with a first line of exactly `---` and ends at `---` or `...`.
+
+```markdown
+---
+title: "A quoted title"
+date: 2026-10-24
+slug: custom-slug
+tags: [myna, static-sites]
+draft: false
+layout: post.html
+type: post
+custom_field: 42
+---
+```
+
+Supported:
+
+- `key: value` lines, one key per line.
+- Single- or double-quoted strings with `\"`, `\'`, `\\`, `\n`, `\t` escapes.
+- Integers, booleans (`true`/`false`), and `null` / `none` / `~`.
+- Inline lists `[a, "b c"]`; `tags: myna, tests` is accepted as a convenience.
+- Blank lines and `#` comments inside front matter.
+- Arbitrary extra keys, exposed as `page.extra.<key>` in templates.
+
+Not supported: block mappings, nested YAML, multi-line scalars, anchors. Duplicate keys,
+malformed lines, missing closing delimiters, invalid dates, and missing `title` are errors
+with file and line information.
+
+### Fields
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `title` | string | Required. |
+| `date` | `YYYY-MM-DD` | Makes the item a post by default. |
+| `slug` | string | Defaults to title, then filename. Sanitised. |
+| `tags` | list | Creates `/tags/<tag>/` pages. |
+| `draft` | boolean | Excluded unless `--drafts`. |
+| `layout` | string | Template filename; defaults to `post.html` or `page.html`. |
+| `type` | `page` or `post` | Defaults to `post` when dated, otherwise `page`. An explicit `type: post` requires `date`. |
+
+Derived template values include `page.slug`, `page.url`, `page.reading_time`, `page.extra`,
+and `page.source`.
+
+Slugs are lowercase, ASCII-folded, hyphenated, and bounded. Path traversal is sanitised:
+`../../etc/passwd` → `etc-passwd`, `..` → `untitled`. Output paths independently reject
+`..` segments.
+
+## Templates
+
+Templates are in `templates/` (configurable). Syntax at a glance:
+
+```html
+{{ page.title }}
+{{ page.title | escape }}
+{{ content | safe }}
+{{ page.date | date("%B %d, %Y") }}
+
+{% if page.tags %}tags{% elif page.type == "post" %}post{% else %}page{% endif %}
+
+{% for post in posts %}
+  <a href="{{ post.url }}">{{ post.title }}</a>
+  {% if not loop.last %},{% endif %}
+{% endfor %}
+
+{% include "partials/footer.html" %}
+{# a comment #}
+```
+
+- Auto-escaping is on. `safe` opts out; `escape` explicitly escapes.
+- Filters compose left-to-right: `{{ "Hello World" | lower | slug }}`.
+- Filters: `escape`, `safe`, `date`, `upper`, `lower`, `slug`, `join`, `default`, `length`,
+  `truncate`.
+- Conditionals support `{% if %}`, `{% elif %}`, `{% else %}`, `{% endif %}`.
+- Loops expose `loop.index`, `loop.index0`, `loop.first`, `loop.last`, `loop.length`.
+- Layout inheritance supports `{% extends "base.html" %}` and named
+  `{% block name %}...{% endblock %}` regions.
+- Expression syntax is a small Python-like dialect (comparisons, `and`/`or`/`not`,
+  arithmetic, indexing, dotted lookup). `true`/`false`/`none` are accepted. Builtins are
+  disabled. Missing names/attributes render empty.
+- Template errors name the template file and line.
+
+The site data available to every template includes `site`, `page`, `content`, `posts`,
+`all_posts`, `page_number`, `total_pages`, `paginator`, `prev_url`, `next_url`, `tag`,
+`tags`, and `now`. Posts are newest-first; the homepage's `posts` is the current page when
+pagination is enabled.
+
+## Markdown subset
+
+Implemented:
+
+- ATX headings `#`–`######`, paragraphs, hard breaks.
+- Emphasis/strong with `*`, `**`, `_`, `__`, and `***`.
+- Inline code, fenced code (``` and ~~~, optional language class), indented code.
+- Blockquotes, nested ordered/unordered lists, horizontal rules.
+- Links, images, scheme and email autolinks.
+- Raw HTML blocks/inline passthrough by design.
+- Text is HTML-escaped by default; code is always escaped and never interpreted.
+
+Out of scope: tables, footnotes, definition lists, task lists, smart punctuation, heading
+IDs, syntax highlighting, and full CommonMark edge cases. Raw HTML is trusted input; add
+your own sanitisation if content is untrusted.
+
+## Configuration
+
+`site.toml` is parsed with stdlib `tomllib` and validated.
+
+| Key | Type | Default |
+| :--- | :--- | :--- |
+| `title` | string | required if the file exists |
+| `description` | string | `""` |
+| `base_url` | string | `""`; must be `http://` or `https://` when set |
+| `author` | string | `""` |
+| `language` | string | `"en"` |
+| `paginate` | integer | `10`; `0` disables pagination |
+| `content_dir` | string | `"content"` |
+| `output_dir` | string | `"build"` |
+| `templates_dir` | string | `"templates"` |
+| `static_dir` | string | `"assets"` |
+
+Relative paths in `site.toml` resolve from the config file's directory. CLI `--src`/`--out`
+resolve from the current directory. Unknown keys, wrong types, a missing title, a bad
+`base_url`, negative pagination, and TOML errors fail with a clear message.
+
+Assembly behaviour:
+
+- Static files keep their directory name (`assets/style.css` → `build/assets/style.css`).
+- `favicon.ico`, `favicon.png`, or `favicon.svg` at the site root is copied to the output.
+- `content/index.md` renders `/`; otherwise a homepage is generated from `index.html` or a
+  minimal built-in fallback.
+- Posts generate tag pages and optional `/page/2/` pagination.
+- With `base_url`, MynaPress emits RSS 2.0 (`rss.xml`), `sitemap.xml`, and `robots.txt` with
+  absolute URLs.
+
+## Development
+
+All application and test code is `.myna`. There is no Python product code; `bin/mynapress`
+is a shell convenience wrapper and the CI workflow is YAML.
+
+```bash
+# tests (Myna test harness)
+export PYTHONPATH=/home/joseph/Projects/myna
+python3 -m myna run tests/run_tests.myna
+
+# the same with an installed Myna
+myna run tests/run_tests.myna
+
+# build both fixture sites
+myna run src/main.myna build --config fixtures/site/site.toml
+myna run src/main.myna build --config fixtures/blog/site.toml
+
+# documentation site
+myna run src/main.myna build
+```
+
+Tests cover slugify (Unicode, punctuation, traversal), front matter (quoted values, lists,
+malformed input, unknown keys), Markdown block/inline forms and escaping, template filters
+and layouts, missing variables and malformed tags, dates, pagination, config validation,
+fixture builds, drafts, tags, expected output, MIME types, 404s, and CLI cleanup.
+
+### Architecture
+
+`src/main.myna` is the entrypoint and loader. It loads `util`, `config`, `content`,
+`markdown`, `template`, `site`, `server`, and `cli`, then dispatches argv.
+
+Myna 0.3.0 cannot import `.myna` modules and `myna run` executes with `__main__` semantics,
+so the application uses a small Myna loader built on the public `myna_to_python` compiler.
+This is a workaround for a real language gap, documented as G2/G3 in `GAPS.md`. Modules share
+one runtime namespace.
+
+## Known limitations
+
+- Full rebuilds only; no incremental cache. Stale output is worse than a slow build.
+- Flat post URLs; nested source folders do not affect URLs.
+- Python target only; no Node target.
+- Small YAML subset, CommonMark-ish Markdown, no tables/footnotes/smart punctuation/highlighting.
+- Raw HTML is trusted and passed through.
+- Tag pages are not paginated.
+- No feeds/sitemap unless `base_url` is configured.
+- Custom module loader (see above).
+- No committed generated HTML. CI builds the docs.
+
+More detail is in the generated docs under `content/limitations.md` and in `GAPS.md`.
+
+## License
+
+Not chosen yet. The project owner should choose a license before publishing. No license
+file is included, so all rights are reserved by default.

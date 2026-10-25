@@ -1,0 +1,59 @@
+@target(py)
+<sys, types
+<pathlib:{Path}
+<myna:{myna_to_python}
+
+@load_module(name:s, base:Path, ns:{s:A})->{s:A} {
+  path = base / `{name}.myna`
+  src = path.read_text(encoding="utf-8")
+  code = myna_to_python(src)
+  exec(compile(code, @str(path), "exec"), ns)
+  ^ ns
+}
+
+@main {
+  tests_dir = Path(__file__).resolve().parent
+  root = tests_dir.parent
+  runtime = types.ModuleType("mynapress_test_runtime")
+  sys.modules["mynapress_test_runtime"] = runtime
+  ns = runtime.__dict__
+  ns["__file__"] = @str(root / "src" / "main.myna")
+  modules = ["util", "config", "content", "markdown", "template", "site", "server", "cli"]
+  % name <- modules {
+    load_module(name, root / "src", ns)
+  }
+
+  files = @srt([p | p <- tests_dir.glob("test_*.myna")], key=p => @str(p))
+  passed = 0
+  failed = 0
+  % path <- files {
+    tns = {**ns, "__name__": path.stem, "__file__": @str(path)}
+    source = path.read_text(encoding="utf-8")
+    !{
+      exec(compile(myna_to_python(source), @str(path), "exec"), tns)
+    } !! e {
+      p(`FAIL {path.name} (load): {type(e).__name__}: {e}`)
+      failed += 1
+      ^>
+    }
+    names = @srt([name | name <- tns.keys() ? name.startswith("test_") && callable(tns[name])])
+    ? #names == 0 {
+      p(`FAIL {path.name}: no test_* functions found`)
+      failed += 1
+      ^>
+    }
+    % name <- names {
+      !{
+        tns[name]()
+        p(`PASS {path.name}::{name}`)
+        passed += 1
+      } !! e {
+        p(`FAIL {path.name}::{name}: {type(e).__name__}: {e}`)
+        failed += 1
+      }
+    }
+  }
+  p("")
+  p(`{passed} passed, {failed} failed`)
+  sys.exit(failed > 0 ? 1 : 0)
+}

@@ -1,0 +1,9 @@
+title = "Blog Fixture"
+description = "Drafts, tags, and pagination."
+base_url = "https://blog.example"
+author = "Blog Author"
+language = "en"
+paginate = 1
+content_dir = "content"
+templates_dir = "../site/templates"
+static_dir = "../site/assets"

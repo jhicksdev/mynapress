@@ -1,0 +1,86 @@
+@target(py)
+<tempfile, shutil
+<pathlib:{Path}
+
+@test_autoescaping_and_safe {
+  ctx = {"title": "<Hello> & 'world'", "body": "<p>ok</p>"}
+  html = render_source("{{ title }}|{{ body }}|{{ body | safe }}", "test", Path("."), ctx, {}, [])
+  !? "&lt;Hello&gt; &amp; &#39;world&#39;" <- html, "autoescape"
+  !? "&lt;p&gt;ok&lt;/p&gt;" <- html, "escaped without safe"
+  !? "<p>ok</p>" <- html, "safe bypasses escaping"
+}
+
+@test_filters {
+  ctx = {"name": "Hello World", "items": ["a", "b"], "date": "2026-10-24", "empty": "", "missing": N}
+  source = "{{ name | lower }}|{{ name | upper }}|{{ name | slug }}|{{ items | join(' / ') }}|{{ date | date('%Y') }}|{{ missing | default('fallback') }}|{{ items | length }}|{{ name | truncate(5) }}"
+  html = render_source(source, "test", Path("."), ctx, {}, [])
+  !? "hello world|HELLO WORLD|hello-world|a / b|2026|fallback|2|Hello…" == html, "filter outputs"
+  !? render_source("{{ name | slug | upper }}", "test", Path("."), ctx, {}, []) == "HELLO-WORLD", "filters compose left-to-right"
+}
+
+@test_if_elif_else {
+  source = "{% if n > 2 %}big{% elif n == 2 %}two{% else %}small{% endif %}"
+  !? render_source(source, "test", Path("."), {"n": 3}, {}, []) == "big", "if"
+  !? render_source(source, "test", Path("."), {"n": 2}, {}, []) == "two", "elif"
+  !? render_source(source, "test", Path("."), {"n": 1}, {}, []) == "small", "else"
+  !? render_source("{% if missing %}yes{% else %}no{% endif %}", "test", Path("."), {}, {}, []) == "no", "missing is falsey"
+}
+
+@test_loops_and_nested_loops {
+  ctx = {"groups": [["a", "b"], ["c"]]}
+  source = "{% for group in groups %}{% for item in group %}{{ loop.index }}:{{ item }}{% if not loop.last %},{% endif %}{% endfor %};{% endfor %}"
+  html = render_source(source, "test", Path("."), ctx, {}, [])
+  !? html == "1:a,2:b;1:c;", "nested loops and loop metadata"
+  !? render_source("{% for x in [] %}x{% endfor %}", "test", Path("."), {}, {}, []) == "", "empty loop"
+}
+
+@test_missing_variable {
+  !? render_source("{{ missing }}", "test", Path("."), {}, {}, []) == "", "missing renders empty"
+  !? render_source("{{ missing | default('x') }}", "test", Path("."), {}, {}, []) == "x", "default filter"
+}
+
+@test_comments {
+  !? render_source("a{# hidden {{ x }} #}b", "test", Path("."), {}, {}, []) == "ab", "comments removed"
+}
+
+@test_includes_and_extends {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "partials").mkdir()
+    (root / "partials" / "footer.html").write_text("<footer>{{ site }}</footer>", encoding="utf-8")
+    (root / "base.html").write_text("<title>{% block title %}Default{% endblock %}</title><main>{% block content %}Default{% endblock %}</main>", encoding="utf-8")
+    (root / "child.html").write_text('{% extends "base.html" %}{% block title %}Child {{ site }}{% endblock %}{% block content %}{% include "partials/footer.html" %}{% endblock %}', encoding="utf-8")
+    html = render_template("child.html", {"site": "Myna"}, root)
+    !? "<title>Child Myna</title>" <- html, "extends title block"
+    !? "<footer>Myna</footer>" <- html, "include inside block"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
+@test_template_errors_have_file_and_line {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "bad.html").write_text("line one\nline two\n{% nope %}\n", encoding="utf-8")
+    !{
+      render_template("bad.html", {}, root)
+      !? F, "unknown tag should fail"
+    } !! e:ValueError {
+      !? "bad.html:3" <- @str(e), "error names template and line"
+    }
+    !{
+      render_source("{% if x %}", "unclosed.html", root, {"x": 1}, {}, [])
+      !? F, "unclosed if should fail"
+    } !! e:ValueError {
+      !? "unclosed.html" <- @str(e), "unclosed error names file"
+    }
+    !{
+      render_source("{{ x | nope }}", "filter.html", root, {"x": 1}, {}, [])
+      !? F, "unknown filter should fail"
+    } !! e:ValueError {
+      !? "unknown filter" <- @str(e), "unknown filter error"
+    }
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}

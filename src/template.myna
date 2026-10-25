@@ -1,0 +1,446 @@
+@target(py)
+<re
+<pathlib:{Path}
+
+$Safe < str {
+  @init(value:s) {
+    _
+  }
+}
+
+$$Token(kind:s, value:s, line:i)
+
+@template_error(filename:s, line:i, message:s) {
+  !^ ValueError(`{filename}:{line}: {message}`)
+}
+
+@as_safe(value:A)->Safe {
+  ? value === N {
+    ^ Safe("")
+  }
+  ^ Safe(@str(value))
+}
+
+@stringify(value:A)->s {
+  ? value === N {
+    ^ ""
+  }
+  ? isinstance(value, Safe) {
+    ^ @str(value)
+  }
+  ? value :? b {
+    ^ value ? "true" : "false"
+  }
+  ^ html_escape(value)
+}
+
+@next_tag(src:s, start:i)->(i, s) {
+  best = -1
+  kind = ""
+  % item <- (("{{", "var"), ("{%", "tag"), ("{#", "comment")) {
+    opener = item[0]
+    pos = src.find(opener, start)
+    ? pos >= 0 && (best < 0 || pos < best) {
+      best = pos
+      kind = item[1]
+    }
+  }
+  ^ best, kind
+}
+
+@tokenize(src:s, filename:s)->[Token] {
+  tokens = []
+  i = 0
+  line = 1
+  %? i < #src {
+    pos, kind = next_tag(src, i)
+    ? pos < 0 {
+      ? i < #src {
+        text = src[i:]
+        tokens.append(Token("text", text, line))
+        line += text.count("\n")
+      }
+      ^!
+    }
+    ? pos > i {
+      text = src[i:pos]
+      tokens.append(Token("text", text, line))
+      line += text.count("\n")
+    }
+    closer = kind == "var" ? "}}" : (kind == "tag" ? "%}" : "#}")
+    end = src.find(closer, pos + 2)
+    ? end < 0 {
+      template_error(filename, line, `unclosed '{closer}' tag`)
+    }
+    raw = src[pos + 2:end]
+    full = src[pos:end + 2]
+    ? kind == "var" {
+      tokens.append(Token("var", raw.strip(), line))
+    } :? kind == "tag" {
+      tokens.append(Token("tag", raw.strip(), line))
+    }
+    line += full.count("\n")
+    i = end + 2
+  }
+  ^ tokens
+}
+
+@split_top(value:s, separator:s)->[s] {
+  parts = []
+  current = ""
+  quote = ""
+  depth = 0
+  % ch <- value {
+    ? quote != "" {
+      current += ch
+      ? ch == quote {
+        quote = ""
+      }
+    } :? ch == '"' || ch == "'" {
+      quote = ch
+      current += ch
+    } :? ch == "(" || ch == "[" || ch == "{" {
+      depth += 1
+      current += ch
+    } :? ch == ")" || ch == "]" || ch == "}" {
+      depth -= 1
+      current += ch
+    } :? ch == separator && depth == 0 {
+      parts.append(current.strip())
+      current = ""
+    } : {
+      current += ch
+    }
+  }
+  ? current.strip() != "" || #value == 0 {
+    parts.append(current.strip())
+  }
+  ^ parts
+}
+
+@translate_expr(expr:s)->s {
+  out = re.sub(_"\btrue\b", "True", expr)
+  out = re.sub(_"\bfalse\b", "False", out)
+  out = re.sub(_"\bnone\b", "None", out)
+  out = re.sub(_"\bnull\b", "None", out)
+  ^ out
+}
+
+@eval_expr(expr:s, ctx:{s:A}, filename:s, line:i)->A {
+  ? expr.strip() == "" {
+    template_error(filename, line, "empty expression")
+  }
+  code = translate_expr(expr.strip())
+  !{
+    ^ eval(code, {"__builtins__": {}}, ctx)
+  } !! e:NameError {
+    ^ N
+  } !! e:AttributeError {
+    ^ N
+  } !! e:KeyError {
+    ^ N
+  } !! e:IndexError {
+    ^ N
+  } !! e:SyntaxError {
+    template_error(filename, line, `invalid expression '{expr}': {e}`)
+  } !! e:TypeError {
+    ^ N
+  }
+}
+
+@parse_filter(part:s)->(s, [s]) {
+  text = part.strip()
+  open = text.find("(")
+  ? open < 0 {
+    ^ text, []
+  }
+  ? !text.endswith(")") {
+    ^ text, []
+  }
+  name = text[:open].strip()
+  raw_args = text[open + 1:-1].strip()
+  ? raw_args == "" {
+    ^ name, []
+  }
+  ^ name, split_top(raw_args, ",")
+}
+
+@apply_filter(name:s, value:A, args:[s], ctx:{s:A}, filename:s, line:i)->A {
+  ? name == "escape" {
+    ^ as_safe(html_escape(value ?? ""))
+  }
+  ? name == "safe" {
+    ^ as_safe(value ?? "")
+  }
+  ? name == "date" {
+    fmt = "%b %d, %Y"
+    ? #args > 0 {
+      fmt = @str(eval_expr(args[0], ctx, filename, line))
+    }
+    ^ format_date(value, fmt)
+  }
+  ? name == "upper" {
+    ^ @str(value ?? "").upper()
+  }
+  ? name == "lower" {
+    ^ @str(value ?? "").lower()
+  }
+  ? name == "slug" {
+    ^ slugify(value ?? "")
+  }
+  ? name == "join" {
+    sep = ", "
+    ? #args > 0 {
+      sep = @str(eval_expr(args[0], ctx, filename, line))
+    }
+    ? value === N {
+      ^ ""
+    }
+    ^ sep.join([@str(item) | item <- value])
+  }
+  ? name == "default" {
+    fallback = ""
+    ? #args > 0 {
+      fallback = eval_expr(args[0], ctx, filename, line)
+    }
+    ? value === N || value == "" || value == [] {
+      ^ fallback
+    }
+    ^ value
+  }
+  ? name == "length" {
+    ? value === N {
+      ^ 0
+    }
+    ^ #value
+  }
+  ? name == "truncate" {
+    limit = 80
+    suffix = "…"
+    ? #args > 0 {
+      limit = @int(eval_expr(args[0], ctx, filename, line))
+    }
+    ? #args > 1 {
+      suffix = @str(eval_expr(args[1], ctx, filename, line))
+    }
+    ^ truncate_text(value ?? "", limit, suffix)
+  }
+  template_error(filename, line, `unknown filter '{name}'`)
+}
+
+@render_var(expr:s, ctx:{s:A}, filename:s, line:i)->s {
+  parts = split_top(expr, "|")
+  ? #parts == 0 {
+    template_error(filename, line, "empty expression")
+  }
+  value = eval_expr(parts[0], ctx, filename, line)
+  % part <- parts[1:] {
+    name, args = parse_filter(part)
+    ? name == "" {
+      template_error(filename, line, "empty filter")
+    }
+    value = apply_filter(name, value, args, ctx, filename, line)
+  }
+  ^ stringify(value)
+}
+
+@parse_nodes(tokens:[Token], start:i, stop:{s:b}, filename:s)->([A], i, s) {
+  nodes = []
+  i = start
+  %? i < #tokens {
+    token = tokens[i]
+    ? token.kind == "text" {
+      nodes.append({"kind": "text", "value": token.value, "line": token.line})
+      i += 1
+      ^>
+    }
+    ? token.kind == "var" {
+      nodes.append({"kind": "var", "value": token.value, "line": token.line})
+      i += 1
+      ^>
+    }
+    parts = token.value.split(None, 1)
+    command = #parts > 0 ? parts[0] : ""
+    rest = #parts > 1 ? parts[1].strip() : ""
+    ? command <- stop {
+      ^ nodes, i, command
+    }
+    ? command == "if" {
+      branches = []
+      body, i, stopped = parse_nodes(tokens, i + 1, {"elif", "else", "endif"}, filename)
+      branches.append({"cond": rest, "body": body})
+      %? stopped == "elif" {
+        branch_token = tokens[i]
+        branch_parts = branch_token.value.split(None, 1)
+        cond = #branch_parts > 1 ? branch_parts[1].strip() : ""
+        body, i, stopped = parse_nodes(tokens, i + 1, {"elif", "else", "endif"}, filename)
+        branches.append({"cond": cond, "body": body})
+      }
+      other = []
+      ? stopped == "else" {
+        other, i, stopped = parse_nodes(tokens, i + 1, {"endif"}, filename)
+      }
+      ? stopped != "endif" {
+        template_error(filename, token.line, "unterminated if block (missing endif)")
+      }
+      nodes.append({"kind": "if", "branches": branches, "else": other, "line": token.line})
+      i += 1
+      ^>
+    }
+    ? command == "for" {
+      pattern = re.match(_"^([A-Za-z_][A-Za-z0-9_]*)\s+in\s+(.+)$", rest)
+      ? pattern === N {
+        template_error(filename, token.line, "for tag must be '{% for x in items %}'")
+      }
+      body, i, stopped = parse_nodes(tokens, i + 1, {"endfor"}, filename)
+      ? stopped != "endfor" {
+        template_error(filename, token.line, "unterminated for block (missing endfor)")
+      }
+      nodes.append({"kind": "for", "var": pattern.group(1), "expr": pattern.group(2), "body": body, "line": token.line})
+      i += 1
+      ^>
+    }
+    ? command == "include" {
+      nodes.append({"kind": "include", "expr": rest, "line": token.line})
+      i += 1
+      ^>
+    }
+    ? command == "extends" {
+      nodes.append({"kind": "extends", "expr": rest, "line": token.line})
+      i += 1
+      ^>
+    }
+    ? command == "block" {
+      name = rest.strip()
+      ? name == "" {
+        template_error(filename, token.line, "block tag needs a name")
+      }
+      body, i, stopped = parse_nodes(tokens, i + 1, {"endblock"}, filename)
+      ? stopped != "endblock" {
+        template_error(filename, token.line, "unterminated block (missing endblock)")
+      }
+      nodes.append({"kind": "block", "name": name, "body": body, "line": token.line})
+      i += 1
+      ^>
+    }
+    template_error(filename, token.line, `unknown template tag '{command}'`)
+  }
+  ? #stop > 0 {
+    last_line = #tokens > 0 ? tokens[#tokens - 1].line : 1
+    template_error(filename, last_line, `missing {", ".join(@srt(@list(stop)))}`)
+  }
+  ^ nodes, i, ""
+}
+
+@find_extends(nodes:[A])->A {
+  % node <- nodes {
+    ? node["kind"] == "extends" {
+      ^ node
+    }
+  }
+  ^ N
+}
+
+@render_nodes(nodes:[A], ctx:{s:A}, filename:s, root:Path, overrides:{s:A}, stack:[s])->s {
+  out = []
+  % node <- nodes {
+    kind = node["kind"]
+    ? kind == "text" {
+      out.append(node["value"])
+    } :? kind == "var" {
+      out.append(render_var(node["value"], ctx, filename, node["line"]))
+    } :? kind == "if" {
+      matched = F
+      % branch <- node["branches"] {
+        ? !matched && @bool(eval_expr(branch["cond"], ctx, filename, node["line"])) {
+          out.append(render_nodes(branch["body"], ctx, filename, root, overrides, stack))
+          matched = T
+        }
+      }
+      ? !matched {
+        out.append(render_nodes(node["else"], ctx, filename, root, overrides, stack))
+      }
+    } :? kind == "for" {
+      items = eval_expr(node["expr"], ctx, filename, node["line"])
+      ? items === N {
+        items = []
+      }
+      ? isinstance(items, dict) {
+        items = @list(items.items())
+      }
+      total = #items
+      % index, item <- @enum(items) {
+        child = {**ctx, node["var"]: item, "loop": DotDict({"index": index + 1, "index0": index, "first": index == 0, "last": index + 1 == total, "length": total})}
+        out.append(render_nodes(node["body"], child, filename, root, overrides, stack))
+      }
+    } :? kind == "include" {
+      name = eval_expr(node["expr"], ctx, filename, node["line"])
+      ? !(name :? s) || @str(name).strip() == "" {
+        template_error(filename, node["line"], "include needs a template path string")
+      }
+      include_name = @str(name).strip()
+      ? include_name <- stack {
+        template_error(filename, node["line"], `recursive include of '{include_name}'`)
+      }
+      include_path = safe_join(root, include_name)
+      ? !include_path.exists() {
+        template_error(filename, node["line"], `included template not found: {include_name}`)
+      }
+      source = include_path.read_text(encoding="utf-8")
+      out.append(render_source(source, include_name, root, ctx, {}, stack + [include_name]))
+    } :? kind == "block" {
+      name = node["name"]
+      ? name <- overrides {
+        out.append(render_nodes(overrides[name], ctx, filename, root, overrides, stack))
+      } : {
+        out.append(render_nodes(node["body"], ctx, filename, root, overrides, stack))
+      }
+    } :? kind == "extends" {
+      _
+    } : {
+      template_error(filename, node["line"], `unknown parsed node '{kind}'`)
+    }
+  }
+  ^ "".join(out)
+}
+
+@render_source(source:s, filename:s, root:Path, ctx:{s:A}, overrides:{s:A}, stack:[s])->s {
+  tokens = tokenize(source, filename)
+  nodes, _, stopped = parse_nodes(tokens, 0, {}, filename)
+  ? stopped != "" {
+    template_error(filename, 1, `unexpected '{stopped}'`)
+  }
+  extension = find_extends(nodes)
+  ? extension !== N {
+    child_blocks = {}
+    % node <- nodes {
+      ? node["kind"] == "block" {
+        child_blocks[node["name"]] = node["body"]
+      }
+    }
+    parent_name = eval_expr(extension["expr"], ctx, filename, extension["line"])
+    ? !(parent_name :? s) || @str(parent_name).strip() == "" {
+      template_error(filename, extension["line"], "extends needs a template path string")
+    }
+    parent = @str(parent_name).strip()
+    ? parent <- stack {
+      template_error(filename, extension["line"], `recursive extends of '{parent}'`)
+    }
+    parent_path = safe_join(root, parent)
+    ? !parent_path.exists() {
+      template_error(filename, extension["line"], `parent template not found: {parent}`)
+    }
+    parent_source = parent_path.read_text(encoding="utf-8")
+    ^ render_source(parent_source, parent, root, ctx, child_blocks, stack + [parent])
+  }
+  ^ render_nodes(nodes, ctx, filename, root, overrides, stack)
+}
+
+@render_template(name:s, ctx:{s:A}, templates_dir:Path)->s {
+  path = safe_join(templates_dir, name)
+  ? !path.exists() {
+    !^ ValueError(`template not found: {name}`)
+  }
+  source = path.read_text(encoding="utf-8")
+  ^ render_source(source, name, templates_dir, ctx, {}, [name])
+}

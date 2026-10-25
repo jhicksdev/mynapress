@@ -1,0 +1,102 @@
+@target(py)
+<threading, time, functools
+<pathlib:{Path}
+<http.server:{ThreadingHTTPServer, SimpleHTTPRequestHandler}
+
+$SiteHandler < SimpleHTTPRequestHandler {
+  @log_message(format:s, *args) {
+    _
+  }
+}
+
+@watch_files(config:SiteConfig)->[Path] {
+  root = Path(config.root)
+  candidates = [
+    root / "site.toml",
+    root / "favicon.ico",
+    root / "favicon.png",
+    root / "favicon.svg",
+    site_path(config, config.content_dir),
+    site_path(config, config.templates_dir),
+    site_path(config, config.static_dir)
+  ]
+  files = []
+  % path <- candidates {
+    ? path.is_file() {
+      files.append(path)
+    } :? path.is_dir() {
+      % child <- path.rglob("*") {
+        ? child.is_file() {
+          files.append(child)
+        }
+      }
+    }
+  }
+  ^ @srt(files, key=p => @str(p))
+}
+
+@snapshot(config:SiteConfig)->{s:A} {
+  result = {}
+  % path <- watch_files(config) {
+    !{
+      stat = path.stat()
+      result[@str(path)] = (stat.st_mtime_ns, stat.st_size)
+    } !! :OSError {
+      _
+    }
+  }
+  ^ result
+}
+
+@print_build(result:BuildResult) {
+  seconds = `{result.duration:.2f}`
+  p(`Built {result.pages} page(s), {result.posts} post(s), {result.tags} tag page(s), {result.assets} asset(s) in {seconds}s`)
+  % warning <- result.warnings {
+    p(`  warning: {warning}`)
+  }
+}
+
+@serve_site(config:SiteConfig, port:i=8000, watch:b=F, drafts:b=F)->i {
+  result = build_site(config, drafts)
+  print_build(result)
+  out_dir = site_path(config, config.output_dir)
+  handler = functools.partial(SiteHandler, directory=@str(out_dir))
+  !{
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+  } !! e:OSError {
+    !^ ValueError(`could not start server on 127.0.0.1:{port}: {e}`)
+  }
+  actual_port = httpd.server_port
+  thread = threading.Thread(target=httpd.serve_forever, daemon=T)
+  thread.start()
+  p(`Serving {out_dir} at http://localhost:{actual_port}/`)
+  ? watch {
+    p(`Watching for changes (Ctrl+C to stop)...`)
+  }
+  p(`Press Ctrl+C to stop.`)
+
+  last = snapshot(config)
+  !{
+    %? T {
+      time.sleep(1.0)
+      current = snapshot(config)
+      ? current != last {
+        p(`[watch] change detected; rebuilding...`)
+        !{
+          rebuilt = build_site(config, drafts)
+          print_build(rebuilt)
+        } !! e {
+          p(`[watch] rebuild failed: {e}`)
+        }
+        last = snapshot(config)
+      }
+    }
+  } !! :KeyboardInterrupt {
+    p("Shutting down.")
+  } !: {
+    httpd.shutdown()
+    httpd.server_close()
+    thread.join(timeout=2.0)
+  }
+  ^ 0
+}

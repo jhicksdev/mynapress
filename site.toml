@@ -1,0 +1,5 @@
+title = "MynaPress"
+description = "A small, dependency-free static site generator written entirely in Myna."
+author = "MynaPress contributors"
+language = "en"
+paginate = 10

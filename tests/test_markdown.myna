@@ -1,0 +1,79 @@
+@target(py)
+
+@test_headings_and_paragraphs {
+  html = render_markdown("# One\n\n## Two\n\n###### Six\n\nA paragraph.\n")
+  !? "<h1>One</h1>" <- html, "h1"
+  !? "<h2>Two</h2>" <- html, "h2"
+  !? "<h6>Six</h6>" <- html, "h6"
+  !? "<p>A paragraph.</p>" <- html, "paragraph"
+}
+
+@test_inline_forms_and_escaping {
+  html = render_inline("**bold** *em* `code <x>` and 1 < 2 & 3")
+  !? "<strong>bold</strong>" <- html, "strong"
+  !? "<em>em</em>" <- html, "emphasis"
+  !? "<code>code &lt;x&gt;</code>" <- html, "code span escaped"
+  !? "1 &lt; 2 &amp; 3" <- html, "text escaped"
+}
+
+@test_emphasis_rules {
+  html = render_inline("2 * 3 * 4 and a_b_c and ***both***")
+  !? "2 * 3 * 4" <- html, "spaced asterisks are literal"
+  !? "a_b_c" <- html, "intraword underscore is literal"
+  !? "<em><strong>both</strong></em>" <- html, "triple emphasis"
+}
+
+@test_links_images_and_autolinks {
+  html = render_inline('[text](https://example.com "Title") ![alt](img.png) <https://auto.example> <me@example.com>')
+  !? '<a href="https://example.com" title="Title">text</a>' <- html, "link"
+  !? '<img src="img.png" alt="alt">' <- html, "image"
+  !? '<a href="https://auto.example">https://auto.example</a>' <- html, "autolink"
+  !? '<a href="mailto:me@example.com">me@example.com</a>' <- html, "email autolink"
+}
+
+@test_raw_html_passthrough_and_hard_breaks {
+  html = render_inline("<span class=\"x\">raw</span>  \nnext")
+  !? '<span class="x">raw</span>' <- html, "raw inline HTML"
+  !? "<br>" <- html, "hard break"
+}
+
+@test_fenced_and_indented_code {
+  fenced = render_markdown("```python\nprint(\"<hi>\")\n```\n")
+  !? '<pre><code class="language-python">' <- fenced, "fence language"
+  !? "print(&quot;&lt;hi&gt;&quot;)" <- fenced, "fenced code escaped"
+  tildes = render_markdown("~~~\nnot <b>html</b>\n~~~\n")
+  !? "not &lt;b&gt;html&lt;/b&gt;" <- tildes, "tilde fence"
+  indented = render_markdown("    indented <code>\n")
+  !? "<pre><code>indented &lt;code&gt;" <- indented, "indented code"
+}
+
+@test_blockquotes_and_rules {
+  html = render_markdown("> quote\n> continued\n\n---\n")
+  !? "<blockquote>" <- html, "blockquote"
+  !? "quote\ncontinued" <- html, "quote content"
+  !? "<hr>" <- html, "horizontal rule"
+}
+
+@test_nested_lists {
+  html = render_markdown("- one\n- two\n  - nested\n  - nested 2\n- three\n")
+  !? "<ul>" <- html, "unordered list"
+  !? "<li>one</li>" <- html, "first item"
+  !? "<li>nested</li>" <- html, "nested item"
+  !? html.count("<ul>") == 2, "two nested lists"
+  ordered = render_markdown("1. first\n2. second\n")
+  !? "<ol>" <- ordered, "ordered list"
+  !? "<li>second</li>" <- ordered, "ordered item"
+}
+
+@test_raw_html_block {
+  html = render_markdown('<div class="box">\n<strong>raw</strong>\n</div>\n')
+  !? '<div class="box">' <- html, "raw block opening"
+  !? "<strong>raw</strong>" <- html, "raw block content untouched"
+}
+
+@test_code_blocks_never_interpret_markdown {
+  html = render_markdown("```\n**not bold**\n[not](a link)\n```\n")
+  !? "**not bold**" <- html, "markdown in code untouched"
+  !? "<strong>" !<- html, "no strong in code"
+  !? "<a " !<- html, "no link in code"
+}

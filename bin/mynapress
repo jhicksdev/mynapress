@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+MYNA_SRC=${MYNA_SRC:-/home/joseph/Projects/myna}
+export PYTHONPATH="$MYNA_SRC${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m myna run "$ROOT/src/main.myna" "$@"

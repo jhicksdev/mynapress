@@ -1,0 +1,281 @@
+@target(py)
+<shutil, time, math
+<pathlib:{Path}
+<datetime:{datetime, timezone}
+<dataclasses:{field}
+
+$$BuildResult(
+  pages:i,
+  posts:i,
+  tags:i,
+  assets:i,
+  warnings:[s]=field(default_factory=list),
+  duration:f=0.0,
+  output_dir:s=""
+)
+
+@site_context(config:SiteConfig, page:Page, content:A, posts:[Page], all_posts:[Page], page_number:i, total_pages:i, prev_url:s, next_url:s, tag_info:A, tag_infos:[A])->{s:A} {
+  paginator = DotDict({
+    "number": page_number,
+    "total": total_pages,
+    "prev": prev_url,
+    "next": next_url,
+    "has_prev": prev_url != "",
+    "has_next": next_url != ""
+  })
+  ^ {
+    "site": config,
+    "page": page,
+    "content": content,
+    "posts": posts,
+    "all_posts": all_posts,
+    "page_number": page_number,
+    "total_pages": total_pages,
+    "prev_url": prev_url,
+    "next_url": next_url,
+    "paginator": paginator,
+    "tag": tag_info,
+    "tags": tag_infos,
+    "now": datetime.now()
+  }
+}
+
+@write_page(out_dir:Path, url:s, html:s) {
+  target = out_dir / output_relpath(url)
+  target.parent.mkdir(parents=True, exist_ok=True)
+  target.write_text(html, encoding="utf-8")
+}
+
+@validate_urls(pages:[Page]) {
+  seen = {}
+  % page <- pages {
+    ? page.url <- seen {
+      !^ ValueError(`duplicate output URL '{page.url}' from {seen[page.url]} and {page.source}`)
+    }
+    seen[page.url] = page.source
+  }
+}
+
+@tag_infos(posts:[Page])->[A] {
+  groups = {}
+  % post <- posts {
+    % tag <- post.tags {
+      ? !(tag <- groups) {
+        groups[tag] = []
+      }
+      groups[tag].append(post)
+    }
+  }
+  infos = []
+  seen_slugs = {}
+  % name <- @srt(groups.keys()) {
+    slug = slugify(name)
+    ? slug <- seen_slugs {
+      !^ ValueError(`tags '{seen_slugs[slug]}' and '{name}' both map to /tags/{slug}/`)
+    }
+    seen_slugs[slug] = name
+    tag_posts = @srt(groups[name], key=p => (p.date, p.slug), reverse=T)
+    infos.append(DotDict({
+      "name": name,
+      "slug": slug,
+      "url": `/tags/{slug}/`,
+      "posts": tag_posts,
+      "count": #tag_posts
+    }))
+  }
+  ^ infos
+}
+
+@copy_static(config:SiteConfig, out_dir:Path, warnings:[s])->i {
+  root = Path(config.root)
+  static_dir = site_path(config, config.static_dir)
+  count = 0
+  ? static_dir.exists() && static_dir.is_dir() {
+    files = [p | p <- static_dir.rglob("*") ? p.is_file()]
+    count += #files
+    shutil.copytree(static_dir, out_dir / static_dir.name, dirs_exist_ok=True)
+  } : {
+    warnings.append(`static directory not found: {static_dir}`)
+  }
+  % name <- ("favicon.ico", "favicon.png", "favicon.svg") {
+    icon = root / name
+    ? icon.exists() && icon.is_file() {
+      shutil.copy2(icon, out_dir / name)
+      count += 1
+    }
+  }
+  _ = root
+  ^ count
+}
+
+@resolve_layout(config:SiteConfig, requested:s, fallbacks:[s], source:s)->s {
+  templates = site_path(config, config.templates_dir)
+  % candidate <- [requested] + fallbacks {
+    ? candidate != "" && (templates / candidate).exists() {
+      ^ candidate
+    }
+  }
+  !^ ValueError(`{source}: template not found (tried: {", ".join([requested] + fallbacks)})`)
+}
+
+@render_content_page(config:SiteConfig, page:Page, posts:[Page], all_posts:[Page], tag_infos:[A], page_number:i, total_pages:i, prev_url:s, next_url:s, tag_info:A=N, content_override:A=N)->s {
+  templates = site_path(config, config.templates_dir)
+  layout = resolve_layout(config, page.layout, ["page.html"], page.source)
+  markdown_html = content_override === N ? render_markdown(page.body) : content_override
+  content = as_safe(markdown_html)
+  ctx = site_context(config, page, content, posts, all_posts, page_number, total_pages, prev_url, next_url, tag_info, tag_infos)
+  !{
+    ^ render_template(layout, ctx, templates)
+  } !! e:ValueError {
+    !^ ValueError(`{page.source}: {e}`)
+  }
+}
+
+@fallback_index_html(config:SiteConfig, posts:[Page], heading:s)->s {
+  items = "".join([`<li><a href="{html_escape(post.url)}">{html_escape(post.title)}</a></li>` | post <- posts])
+  ^ `<!doctype html><html lang="{html_escape(config.language)}"><head><meta charset="utf-8"><title>{html_escape(heading)}</title></head><body><h1>{html_escape(heading)}</h1><ul>{items}</ul></body></html>`
+}
+
+@generated_page(config:SiteConfig, title:s, url:s, layout:s)->Page {
+  ^ Page(title=title, slug=slugify(title), layout=layout, type="page", source="generated", rel_path="generated", url=url, body="", reading_time=1, extra=DotDict({}))
+}
+
+@rss_xml(config:SiteConfig, posts:[Page])->s {
+  now = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+  items = []
+  % post <- posts {
+    link = url_for(config.base_url, post.url)
+    description = post.extra.get("description", "") ?? ""
+    ? @str(description).strip() == "" {
+      description = plain_summary(render_markdown(post.body), 300)
+    }
+    items.append(`<item><title>{xml_escape(post.title)}</title><link>{xml_escape(link)}</link><guid isPermaLink="true">{xml_escape(link)}</guid><pubDate>{rfc822_date(post.date)}</pubDate><description>{xml_escape(description)}</description></item>`)
+  }
+  ^ `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel><title>{xml_escape(config.title)}</title><link>{xml_escape(config.base_url + "/")}</link><description>{xml_escape(config.description)}</description><language>{xml_escape(config.language)}</language><lastBuildDate>{now}</lastBuildDate>{"".join(items)}</channel></rss>\n`
+}
+
+@urls_xml(config:SiteConfig, entries:[A])->s {
+  items = []
+  % entry <- entries {
+    loc = url_for(config.base_url, entry["url"])
+    lastmod = entry.get("lastmod", "") ?? ""
+    lastmod_xml = @str(lastmod).strip() == "" ? "" : `<lastmod>{xml_escape(lastmod)}</lastmod>`
+    items.append(`<url><loc>{xml_escape(loc)}</loc>{lastmod_xml}</url>`)
+  }
+  ^ `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{"".join(items)}</urlset>\n`
+}
+
+@build_site(config:SiteConfig, drafts:b=F)->BuildResult {
+  started = time.perf_counter()
+  content_dir = site_path(config, config.content_dir)
+  out_dir = site_path(config, config.output_dir)
+  templates = site_path(config, config.templates_dir)
+  warnings = []
+  ? out_dir.exists() {
+    shutil.rmtree(out_dir)
+  }
+  out_dir.mkdir(parents=True, exist_ok=True)
+
+  discovered = discover(content_dir, config.content_dir)
+  skipped = [p | p <- discovered ? p.draft && !drafts]
+  ? #skipped > 0 {
+    warnings.append(`skipped {#skipped} draft(s); use --drafts to include them`)
+  }
+  pages = [p | p <- discovered ? !p.draft || drafts]
+  validate_urls(pages)
+  posts = sort_posts([p | p <- pages ? p.type == "post"])
+  tags = tag_infos(posts)
+  assets = copy_static(config, out_dir, warnings)
+  entries = []
+  rendered = 0
+
+  homepage = N
+  % page <- pages {
+    ? page.url == "/" {
+      homepage = page
+    }
+  }
+
+  total_pages = 1
+  ? config.paginate > 0 && #posts > 0 {
+    total_pages = @max(1, math.ceil(#posts / config.paginate))
+  }
+  page_one_posts = posts
+  ? config.paginate > 0 {
+    page_one_posts = posts[:config.paginate]
+  }
+  next_one = total_pages > 1 ? "/page/2/" : ""
+
+  % page <- pages {
+    page_posts = posts
+    pn = 1
+    tp = 1
+    prev_url = ""
+    next_url = ""
+    ? page.url == "/" {
+      page_posts = page_one_posts
+      tp = total_pages
+      next_url = next_one
+    }
+    html = render_content_page(config, page, page_posts, posts, tags, pn, tp, prev_url, next_url)
+    write_page(out_dir, page.url, html)
+    entries.append({"url": page.url, "lastmod": page.date})
+    rendered += 1
+  }
+
+  ? homepage === N {
+    index_layout = (templates / "index.html").exists() ? "index.html" : "page.html"
+    ? index_layout == "page.html" && !(templates / "page.html").exists() {
+      html = fallback_index_html(config, page_one_posts, config.title)
+      warnings.append("no index.html found; generated a minimal homepage")
+    } : {
+      page = generated_page(config, config.title, "/", index_layout)
+      html = render_content_page(config, page, page_one_posts, posts, tags, 1, total_pages, "", next_one, N, "")
+    }
+    write_page(out_dir, "/", html)
+    entries.append({"url": "/", "lastmod": ""})
+    rendered += 1
+  }
+
+  % page_number <- 2..total_pages + 1 {
+    start_at = (page_number - 1) * config.paginate
+    page_posts = posts[start_at:start_at + config.paginate]
+    index_layout = (templates / "index.html").exists() ? "index.html" : (homepage !== N ? homepage.layout : "page.html")
+    ? index_layout == "page.html" && !(templates / "page.html").exists() {
+      html = fallback_index_html(config, page_posts, `{config.title} — Page {page_number}`)
+    } : {
+      page = generated_page(config, `{config.title} — Page {page_number}`, `/page/{page_number}/`, index_layout)
+      prev_url = page_number == 2 ? "/" : `/page/{page_number - 1}/`
+      next_url = page_number < total_pages ? `/page/{page_number + 1}/` : ""
+      html = render_content_page(config, page, page_posts, posts, tags, page_number, total_pages, prev_url, next_url)
+    }
+    url = `/page/{page_number}/`
+    write_page(out_dir, url, html)
+    entries.append({"url": url, "lastmod": ""})
+    rendered += 1
+  }
+
+  % info <- tags {
+    tag_layout = (templates / "tag.html").exists() ? "tag.html" : ((templates / "index.html").exists() ? "index.html" : (homepage !== N ? homepage.layout : "page.html"))
+    ? tag_layout == "page.html" && !(templates / "page.html").exists() {
+      html = fallback_index_html(config, info["posts"], `Tag: {info["name"]}`)
+    } : {
+      page = generated_page(config, `Tag: {info["name"]}`, info["url"], tag_layout)
+      html = render_content_page(config, page, info["posts"], posts, tags, 1, 1, "", "", info)
+    }
+    write_page(out_dir, info["url"], html)
+    entries.append({"url": info["url"], "lastmod": ""})
+    rendered += 1
+  }
+
+  ? config.base_url != "" {
+    (out_dir / "rss.xml").write_text(rss_xml(config, posts), encoding="utf-8")
+    (out_dir / "sitemap.xml").write_text(urls_xml(config, entries), encoding="utf-8")
+    robots = `User-agent: *\nAllow: /\n\nSitemap: {config.base_url}/sitemap.xml\n`
+    (out_dir / "robots.txt").write_text(robots, encoding="utf-8")
+  }
+
+  elapsed = time.perf_counter() - started
+  _ = rendered
+  ^ BuildResult(pages=#pages, posts=#posts, tags=#tags, assets=assets, warnings=warnings, duration=elapsed, output_dir=@str(out_dir))
+}

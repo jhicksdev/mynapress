@@ -1,0 +1,160 @@
+@target(py)
+<tempfile, shutil, re
+<pathlib:{Path}
+
+@repo_root()->Path {
+  ^ Path(__file__).resolve().parent.parent
+}
+
+@build_fixture(name:s, out:Path, drafts:b=F)->BuildResult {
+  config = load_config(@str(repo_root() / "fixtures" / name / "site.toml"))
+  config.output_dir = @str(out)
+  ^ build_site(config, drafts)
+}
+
+@normalize_output(text:s)->s {
+  normalized = text.replace("\r\n", "\n")
+  normalized = re.sub(_"<lastBuildDate>.*?</lastBuildDate>", "<lastBuildDate></lastBuildDate>", normalized)
+  ^ normalized
+}
+
+@test_fixture_build_semantics {
+  out = Path(tempfile.mkdtemp())
+  !{
+    result = build_fixture("site", out, F)
+    !? result.pages == 5, "page count"
+    !? result.posts == 3, "post count"
+    !? result.tags == 3, "tag count"
+    !? (out / "index.html").exists(), "homepage"
+    !? (out / "assets" / "style.css").exists(), "static asset preserved under assets/"
+    !? !(out / "draft-post" / "index.html").exists(), "draft excluded"
+    !? (out / "tags" / "myna" / "index.html").exists(), "tag page"
+    !? (out / "page" / "2" / "index.html").exists(), "pagination page"
+    !? (out / "rss.xml").exists() && (out / "sitemap.xml").exists() && (out / "robots.txt").exists(), "generated XML files"
+    index = (out / "index.html").read_text(encoding="utf-8")
+    !? index.find("Second Post") < index.find("Hello MynaPress"), "posts newest-first"
+    rss = (out / "rss.xml").read_text(encoding="utf-8")
+    !? "https://example.test/hello-mynapress/" <- rss, "absolute feed URL"
+    sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
+    !? "https://example.test/tags/myna/" <- sitemap, "tag URL in sitemap"
+  } !: {
+    shutil.rmtree(out, ignore_errors=T)
+  }
+}
+
+@test_blog_pagination_and_drafts {
+  out = Path(tempfile.mkdtemp())
+  !{
+    result = build_fixture("blog", out, F)
+    !? result.posts == 3, "draft excluded from count"
+    !? !(out / "draft" / "index.html").exists(), "draft page absent"
+    p2 = (out / "page" / "2" / "index.html").read_text(encoding="utf-8")
+    !? "Beta" <- p2, "page 2 has beta"
+    p3 = (out / "page" / "3" / "index.html").read_text(encoding="utf-8")
+    !? "Gamma" <- p3, "page 3 has gamma"
+    !? 'href="/page/3/"' <- p2, "next link"
+    !? 'href="/"' <- p2, "newer link"
+    !? !("Alpha" <- p2), "page 2 does not repeat alpha"
+  } !: {
+    shutil.rmtree(out, ignore_errors=T)
+  }
+  out2 = Path(tempfile.mkdtemp())
+  !{
+    result = build_fixture("blog", out2, T)
+    !? result.posts == 4, "drafts included with flag"
+    draft = (out2 / "draft" / "index.html").read_text(encoding="utf-8")
+    !? "Draft" <- draft, "draft page rendered"
+  } !: {
+    shutil.rmtree(out2, ignore_errors=T)
+  }
+}
+
+@test_expected_output_matches {
+  out = Path(tempfile.mkdtemp())
+  !{
+    build_fixture("blog", out, F)
+    expected = repo_root() / "fixtures" / "blog" / "expected"
+    checks = [
+      "index.html",
+      "page/2/index.html",
+      "alpha/index.html",
+      "tags/myna/index.html",
+      "rss.xml",
+      "sitemap.xml"
+    ]
+    % rel <- checks {
+      actual_path = out / rel
+      !? actual_path.exists(), `missing generated file: {rel}`
+      expected_path = expected / rel
+      !? expected_path.exists(), `missing expected file: {rel}`
+      actual = normalize_output(actual_path.read_text(encoding="utf-8"))
+      wanted = normalize_output(expected_path.read_text(encoding="utf-8"))
+      !? actual == wanted, `output differs for {rel}`
+    }
+  } !: {
+    shutil.rmtree(out, ignore_errors=T)
+  }
+}
+
+@test_url_and_tag_collisions {
+  a = Page(title="A", slug="same", url="/same/", source="a.md")
+  b = Page(title="B", slug="same", url="/same/", source="b.md")
+  !{
+    validate_urls([a, b])
+    !? F, "duplicate URLs should fail"
+  } !! :ValueError {
+    _
+  }
+  post1 = Page(title="One", date="2026-01-01", slug="one", tags=["C++"], url="/one/", type="post")
+  post2 = Page(title="Two", date="2026-01-02", slug="two", tags=["C--"], url="/two/", type="post")
+  !{
+    tag_infos([post1, post2])
+    !? F, "tag slug collision should fail"
+  } !! :ValueError {
+    _
+  }
+}
+
+@test_config_validation {
+  root = Path(tempfile.mkdtemp())
+  !{
+    bad = root / "bad.toml"
+    bad.write_text("title = \"X\"\nnope = 1\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "unknown key should fail"
+    } !! :ValueError {
+      _
+    }
+    bad.write_text("description = \"X\"\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "missing title should fail"
+    } !! :ValueError {
+      _
+    }
+    bad.write_text("title = \"X\"\npaginate = \"two\"\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "wrong paginate type should fail"
+    } !! :ValueError {
+      _
+    }
+    bad.write_text("title = \"X\"\npaginate = true\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "boolean paginate should fail"
+    } !! :ValueError {
+      _
+    }
+    bad.write_text("title = \"X\"\nbase_url = \"example.com\"\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "bad base_url should fail"
+    } !! :ValueError {
+      _
+    }
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}

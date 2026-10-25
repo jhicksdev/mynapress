@@ -1,0 +1,247 @@
+@target(py)
+<re
+<pathlib:{Path}
+<dataclasses:{field}
+
+$$Page(
+  title:s,
+  date:s="",
+  slug:s="",
+  tags:[s]=field(default_factory=list),
+  draft:b=F,
+  layout:s="page.html",
+  type:s="page",
+  source:s="",
+  rel_path:s="",
+  url:s="",
+  body:s="",
+  reading_time:i=1,
+  extra:{s:A}=field(default_factory=dict)
+)
+
+@content_error(source:s, line:i, message:s) {
+  !^ ValueError(`{source}:{line}: {message}`)
+}
+
+@parse_scalar(raw:s)->A {
+  value = raw.strip()
+  ? value == "" {
+    ^ ""
+  }
+  ? (#value >= 2 && (value.startswith('"') || value.startswith("'")) && value[-1] == value[0]) {
+    inner = value[1:-1]
+    inner = inner.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\").replace("\\n", "\n").replace("\\t", "\t")
+    ^ inner
+  }
+  ? value.startswith("[") && value.endswith("]") {
+    inner = value[1:-1]
+    parts = []
+    current = ""
+    quote = ""
+    % ch <- inner {
+      ? quote != "" {
+        current += ch
+        ? ch == quote {
+          quote = ""
+        }
+      } :? ch == '"' || ch == "'" {
+        quote = ch
+        current += ch
+      } :? ch == "," {
+        ? current.strip() != "" {
+          parts.append(parse_scalar(current))
+        }
+        current = ""
+      } : {
+        current += ch
+      }
+    }
+    ? current.strip() != "" {
+      parts.append(parse_scalar(current))
+    }
+    ^ parts
+  }
+  lower = value.lower()
+  ? lower == "true" {
+    ^ T
+  }
+  ? lower == "false" {
+    ^ F
+  }
+  ? lower == "null" || lower == "none" || value == "~" {
+    ^ N
+  }
+  ? re.fullmatch(_"-?\d+", value) {
+    ^ @int(value)
+  }
+  ^ value
+}
+
+@parse_front_matter(text:s, source:s)->({s:A}, s) {
+  normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+  lines = normalized.split("\n")
+  ? #lines == 0 || lines[0].strip() != "---" {
+    ^ {}, normalized
+  }
+  close = -1
+  % i <- 1..#lines {
+    ? lines[i].strip() == "---" || lines[i].strip() == "..." {
+      close = i
+      ^!
+    }
+  }
+  ? close < 0 {
+    !^ ValueError(`{source}:1: front matter is missing a closing '---'`)
+  }
+  fields = {}
+  % i <- 1..close {
+    raw = lines[i]
+    ? raw.strip() == "" || raw.strip().startswith("#") {
+      ^>
+    }
+    ? !(":" <- raw) {
+      content_error(source, i + 1, "front matter line must be 'key: value'")
+    }
+    key_value = raw.split(":", 1)
+    key = key_value[0].strip()
+    ? key == "" {
+      content_error(source, i + 1, "front matter key must not be empty")
+    }
+    ? key <- fields {
+      content_error(source, i + 1, `duplicate front matter key '{key}'`)
+    }
+    fields[key] = parse_scalar(key_value[1])
+  }
+  body = "\n".join(lines[close + 1:])
+  ^ fields, body
+}
+
+@as_string(fields:{s:A}, key:s, default:s="")->s {
+  ? !(key <- fields) || fields[key] === N {
+    ^ default
+  }
+  ^ @str(fields[key]).strip()
+}
+
+@as_bool(fields:{s:A}, key:s, default:b=F)->b {
+  ? !(key <- fields) || fields[key] === N {
+    ^ default
+  }
+  value = fields[key]
+  ? value :? b {
+    ^ value
+  }
+  ? @str(value).strip().lower() <- ("true", "yes", "1") {
+    ^ T
+  }
+  ^ F
+}
+
+@as_tags(fields:{s:A})->[s] {
+  ? !("tags" <- fields) || fields["tags"] === N {
+    ^ []
+  }
+  value = fields["tags"]
+  ? isinstance(value, list) {
+    ^ [@str(tag).strip() | tag <- value ? @str(tag).strip() != ""]
+  }
+  ? isinstance(value, str) {
+    ^ [t.strip() | t <- value.split(",") ? t.strip() != ""]
+  }
+  ^ []
+}
+
+@load_page(path:Path, content_root:Path, source_label:s)->Page {
+  !{
+    text = path.read_text(encoding="utf-8")
+  } !! e:OSError {
+    !^ ValueError(`{source_label}: could not read content file: {e}`)
+  }
+  fields, body = parse_front_matter(text, source_label)
+  ? !("title" <- fields) || @str(fields["title"]).strip() == "" {
+    !^ ValueError(`{source_label}: missing required front matter field 'title'`)
+  }
+  title = @str(fields["title"]).strip()
+  date_value = as_string(fields, "date", "")
+  ? date_value != "" {
+    parsed = parse_date(date_value)
+    ? parsed === N {
+      !^ ValueError(`{source_label}: invalid date '{date_value}' (expected YYYY-MM-DD)`)
+    }
+    date_value = parsed.isoformat()
+  }
+  kind = as_string(fields, "type", date_value != "" ? "post" : "page").lower()
+  ? kind != "page" && kind != "post" {
+    !^ ValueError(`{source_label}: type must be 'page' or 'post', got '{kind}'`)
+  }
+  ? kind == "post" && date_value == "" {
+    !^ ValueError(`{source_label}: posts require a 'date' field (YYYY-MM-DD)`)
+  }
+  slug_source = as_string(fields, "slug", title)
+  ? slug_source == "" {
+    slug_source = title
+  }
+  slug = slugify(slug_source)
+  ? slug == "" {
+    !^ ValueError(`{source_label}: could not derive a safe slug`)
+  }
+  layout_default = kind == "post" ? "post.html" : "page.html"
+  layout = as_string(fields, "layout", layout_default)
+  ? layout == "" {
+    layout = layout_default
+  }
+  rel = ""
+  !{
+    rel = path.relative_to(content_root).as_posix()
+  } !! :ValueError {
+    rel = path.name
+  }
+  is_index = path.name == "index.md"
+  url = is_index ? "/" : `/{slug}/`
+  known = {"title", "date", "slug", "tags", "draft", "layout", "type"}
+  extra = DotDict({k: fields[k] | k <- fields.keys() ? k !<- known})
+  body_text = body.strip()
+  ^ Page(
+    title=title,
+    date=date_value,
+    slug=slug,
+    tags=as_tags(fields),
+    draft=as_bool(fields, "draft", F),
+    layout=layout,
+    type=kind,
+    source=@str(path),
+    rel_path=rel,
+    url=url,
+    body=body_text,
+    reading_time=reading_time(body_text),
+    extra=extra
+  )
+}
+
+@discover(content_root:Path, source_label:s="content")->[Page] {
+  ? !content_root.exists() {
+    !^ ValueError(`content directory not found: {content_root}`)
+  }
+  ? !content_root.is_dir() {
+    !^ ValueError(`content path is not a directory: {content_root}`)
+  }
+  paths = @srt([p | p <- content_root.rglob("*.md") ? !p.name.startswith(".")], key=p => @str(p))
+  pages = []
+  % path <- paths {
+    pages.append(load_page(path, content_root, @str(path)))
+  }
+  ^ pages
+}
+
+@post_sort_key(post:Page) {
+  ^ (post.date, post.slug)
+}
+
+@sort_posts(posts:[Page])->[Page] {
+  ^ @srt(posts, key=p => (p.date, p.slug), reverse=T)
+}
+
+@new_document(title:s, date_value:s, slug:s)->s {
+  quoted_title = title.replace('"', '\\"')
+  ^ `---\ntitle: "{quoted_title}"\ndate: {date_value}\nslug: {slug}\ndraft: false\ntags: []\n---\n\nWrite your post here.\n`
+}

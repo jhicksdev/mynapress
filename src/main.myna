@@ -1,0 +1,27 @@
+@target(py)
+<sys, types
+<pathlib:{Path}
+<myna:{myna_to_python}
+
+@load_module(name:s, base:Path, ns:{s:A})->{s:A} {
+  path = base / `{name}.myna`
+  ? !path.exists() {
+    !^ ValueError(`missing internal module: {path}`)
+  }
+  src = path.read_text(encoding="utf-8")
+  code = myna_to_python(src)
+  exec(compile(code, @str(path), "exec"), ns)
+  ^ ns
+}
+
+@main {
+  base = Path(__file__).resolve().parent
+  runtime = types.ModuleType("mynapress_runtime")
+  sys.modules["mynapress_runtime"] = runtime
+  ns = runtime.__dict__
+  ns["__file__"] = @str(base / "main.myna")
+  % name <- ["util", "config", "content", "markdown", "template", "site", "server", "cli"] {
+    load_module(name, base, ns)
+  }
+  sys.exit(ns$run_cli(sys.argv[1:]))
+}

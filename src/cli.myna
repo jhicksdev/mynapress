@@ -1,0 +1,209 @@
+@target(py)
+<sys, shutil
+<pathlib:{Path}
+<datetime:{date}
+
+@usage()->s {
+  ^ "MynaPress — a small static site generator written in Myna\n\nUsage:\n  myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]\n  myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--drafts]\n  myna run src/main.myna new \"Post title\" [--config site.toml]\n  myna run src/main.myna clean [--config site.toml]\n"
+}
+
+@take_value(args:[s], index:i, option:s)->s {
+  ? index >= #args {
+    !^ ValueError(`option {option} needs a value`)
+  }
+  ^ args[index]
+}
+
+@apply_overrides(config:SiteConfig, src:s, out:s)->SiteConfig {
+  ? src != "" {
+    config.content_dir = @str(Path(src).resolve())
+  }
+  ? out != "" {
+    config.output_dir = @str(Path(out).resolve())
+  }
+  ^ config
+}
+
+@cmd_build(args:[s])->i {
+  config_path = "site.toml"
+  src = ""
+  out = ""
+  drafts = F
+  i = 0
+  %? i < #args {
+    arg = args[i]
+    ? arg == "--help" || arg == "-h" {
+      p(usage())
+      ^ 0
+    } :? arg == "--config" {
+      i += 1
+      config_path = take_value(args, i, arg)
+    } :? arg == "--src" {
+      i += 1
+      src = take_value(args, i, arg)
+    } :? arg == "--out" {
+      i += 1
+      out = take_value(args, i, arg)
+    } :? arg == "--drafts" {
+      drafts = T
+    } : {
+      !^ ValueError(`unknown build option: {arg}`)
+    }
+    i += 1
+  }
+  config = apply_overrides(load_config(config_path), src, out)
+  result = build_site(config, drafts)
+  print_build(result)
+  ^ 0
+}
+
+@cmd_serve(args:[s])->i {
+  config_path = "site.toml"
+  src = ""
+  out = ""
+  port = 8000
+  watch = F
+  drafts = F
+  i = 0
+  %? i < #args {
+    arg = args[i]
+    ? arg == "--help" || arg == "-h" {
+      p(usage())
+      ^ 0
+    } :? arg == "--config" {
+      i += 1
+      config_path = take_value(args, i, arg)
+    } :? arg == "--src" {
+      i += 1
+      src = take_value(args, i, arg)
+    } :? arg == "--out" {
+      i += 1
+      out = take_value(args, i, arg)
+    } :? arg == "--port" {
+      i += 1
+      raw_port = take_value(args, i, arg)
+      !{
+        port = @int(raw_port)
+      } !! :ValueError {
+        !^ ValueError(`--port must be an integer, got '{raw_port}'`)
+      }
+      ? port < 0 || port > 65535 {
+        !^ ValueError("--port must be between 0 and 65535")
+      }
+    } :? arg == "--watch" {
+      watch = T
+    } :? arg == "--drafts" {
+      drafts = T
+    } : {
+      !^ ValueError(`unknown serve option: {arg}`)
+    }
+    i += 1
+  }
+  config = apply_overrides(load_config(config_path), src, out)
+  ^ serve_site(config, port, watch, drafts)
+}
+
+@cmd_new(args:[s])->i {
+  config_path = "site.toml"
+  words = []
+  i = 0
+  %? i < #args {
+    arg = args[i]
+    ? arg == "--help" || arg == "-h" {
+      p(usage())
+      ^ 0
+    } :? arg == "--config" {
+      i += 1
+      config_path = take_value(args, i, arg)
+    } : {
+      words.append(arg)
+    }
+    i += 1
+  }
+  title = " ".join(words).strip()
+  ? title == "" {
+    !^ ValueError("new needs a title, for example: new \"My first post\"")
+  }
+  config = load_config(config_path)
+  content_dir = site_path(config, config.content_dir)
+  content_dir.mkdir(parents=True, exist_ok=True)
+  slug = slugify(title)
+  day = date.today().isoformat()
+  stem = `{day}-{slug}`
+  path = content_dir / `{stem}.md`
+  counter = 2
+  %? path.exists() {
+    path = content_dir / `{stem}-{counter}.md`
+    counter += 1
+  }
+  path.write_text(new_document(title, day, slug), encoding="utf-8")
+  p(`Created {path}`)
+  ^ 0
+}
+
+@cmd_clean(args:[s])->i {
+  config_path = "site.toml"
+  i = 0
+  %? i < #args {
+    arg = args[i]
+    ? arg == "--help" || arg == "-h" {
+      p(usage())
+      ^ 0
+    } :? arg == "--config" {
+      i += 1
+      config_path = take_value(args, i, arg)
+    } : {
+      !^ ValueError(`unknown clean option: {arg}`)
+    }
+    i += 1
+  }
+  config = load_config(config_path)
+  out_dir = site_path(config, config.output_dir)
+  out_text = @str(out_dir.resolve())
+  ? out_text == "/" || out_text == @str(Path(config.root).resolve()) {
+    !^ ValueError(`refusing to clean unsafe output directory: {out_dir}`)
+  }
+  ? out_dir.exists() {
+    shutil.rmtree(out_dir)
+    p(`Removed {out_dir}`)
+  } : {
+    p(`Output directory already absent: {out_dir}`)
+  }
+  cache = Path(config.root) / ".mynapress-cache.json"
+  ? cache.exists() {
+    cache.unlink()
+    p(`Removed {cache}`)
+  }
+  ^ 0
+}
+
+@run_cli(argv:[s])->i {
+  ? #argv == 0 {
+    p(usage())
+    ^ 0
+  }
+  command = argv[0]
+  rest = argv[1:]
+  !{
+    ?? command {
+      "build" => { ^ cmd_build(rest) }
+      "serve" => { ^ cmd_serve(rest) }
+      "new" => { ^ cmd_new(rest) }
+      "clean" => { ^ cmd_clean(rest) }
+      "help" => { p(usage()); ^ 0 }
+      "--help" => { p(usage()); ^ 0 }
+      "-h" => { p(usage()); ^ 0 }
+      _ => {
+        p(`error: unknown command '{command}'`)
+        p(usage())
+        ^ 2
+      }
+    }
+  } !! e:ValueError {
+    p(`error: {e}`)
+    ^ 1
+  } !! e:OSError {
+    p(`error: {e}`)
+    ^ 1
+  }
+}

@@ -1,0 +1,106 @@
+@target(py)
+<tomllib
+<pathlib:{Path}
+
+$$SiteConfig(
+  title:s="MynaPress",
+  description:s="",
+  base_url:s="",
+  author:s="",
+  language:s="en",
+  paginate:i=10,
+  content_dir:s="content",
+  output_dir:s="build",
+  templates_dir:s="templates",
+  static_dir:s="assets",
+  root:s="."
+)
+
+@config_error(path:s, message:s) {
+  !^ ValueError(`{path}: {message}`)
+}
+
+@require_str(raw:{s:A}, key:s, default:s, path:s)->s {
+  ? !(key <- raw) {
+    ^ default
+  }
+  value = raw[key]
+  ? !(value :? s) {
+    config_error(path, `config key '{key}' must be a string`)
+  }
+  ? value.strip() == "" && key != "description" && key != "author" && key != "base_url" {
+    config_error(path, `config key '{key}' must not be empty`)
+  }
+  ^ value.strip()
+}
+
+@require_int(raw:{s:A}, key:s, default:i, path:s)->i {
+  ? !(key <- raw) {
+    ^ default
+  }
+  value = raw[key]
+  ? value :? b {
+    config_error(path, `config key '{key}' must be an integer, not a boolean`)
+  }
+  ? !(value :? i) {
+    config_error(path, `config key '{key}' must be an integer`)
+  }
+  ? value < 0 {
+    config_error(path, `config key '{key}' must be zero or greater`)
+  }
+  ^ value
+}
+
+@load_config(path_value:s="site.toml")->SiteConfig {
+  path = Path(path_value)
+  ? !path.exists() {
+    ^ SiteConfig(root=".")
+  }
+  !{
+    text = path.read_text(encoding="utf-8")
+  } !! e:OSError {
+    !^ ValueError(`could not read config '{path}': {e}`)
+  }
+  !{
+    raw = tomllib.loads(text)
+  } !! e:tomllib.TOMLDecodeError {
+    !^ ValueError(`{path}: invalid TOML: {e}`)
+  }
+  allowed = {"title", "description", "base_url", "author", "language", "paginate", "content_dir", "output_dir", "templates_dir", "static_dir"}
+  unknown = [k | k <- raw.keys() ? k !<- allowed]
+  ? #unknown > 0 {
+    !^ ValueError(`{path}: unknown config key(s): {@str(", ".join(unknown))}`)
+  }
+  title = require_str(raw, "title", "MynaPress", path)
+  ? !("title" <- raw) {
+    !^ ValueError(`{path}: missing required config key 'title'`)
+  }
+  base_url = require_str(raw, "base_url", "", path).rstrip("/")
+  ? base_url != "" && !(base_url.startswith("http://") || base_url.startswith("https://")) {
+    !^ ValueError(`{path}: base_url must start with http:// or https://`)
+  }
+  paginate = require_int(raw, "paginate", 10, path)
+  root = @str(path.resolve().parent)
+  _ = raw
+  ^ SiteConfig(
+    title=title,
+    description=require_str(raw, "description", "", path),
+    base_url=base_url,
+    author=require_str(raw, "author", "", path),
+    language=require_str(raw, "language", "en", path),
+    paginate=paginate,
+    content_dir=require_str(raw, "content_dir", "content", path),
+    output_dir=require_str(raw, "output_dir", "build", path),
+    templates_dir=require_str(raw, "templates_dir", "templates", path),
+    static_dir=require_str(raw, "static_dir", "assets", path),
+    root=root
+  )
+}
+
+@site_path(config:SiteConfig, relative:s)->Path {
+  p = Path(relative)
+  ? p.is_absolute() {
+    ^ p
+  }
+  ^ Path(config.root) / p
+}

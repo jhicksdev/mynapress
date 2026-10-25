@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Myna
+        run: python -m pip install myna-lang==0.3.0
+      - name: Run MynaPress tests
+        run: python -m myna run tests/run_tests.myna
+      - name: Build fixture site
+        run: python -m myna run src/main.myna build --config fixtures/site/site.toml
+      - name: Build documentation site
+        run: python -m myna run src/main.myna build

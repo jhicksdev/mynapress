@@ -1,0 +1,6 @@
+title = "Fixture Site"
+description = "A small MynaPress fixture."
+base_url = "https://example.test"
+author = "Test Author"
+language = "en"
+paginate = 2

@@ -1,0 +1,7 @@
+build/
+.venv/
+.mynapress-cache.json
+__pycache__/
+*.py[cod]
+*.py
+.DS_Store

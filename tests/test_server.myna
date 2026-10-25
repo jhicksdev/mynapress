@@ -1,0 +1,45 @@
+@target(py)
+<tempfile, shutil, functools, threading
+<pathlib:{Path}
+<urllib.request:{urlopen}
+<urllib.error:HTTPError
+<http.server:{ThreadingHTTPServer}
+
+@test_static_server_mime_and_404 {
+  out = Path(tempfile.mkdtemp())
+  !{
+    config = load_config(@str(Path(__file__).resolve().parent.parent / "fixtures" / "site" / "site.toml"))
+    config.output_dir = @str(out)
+    build_site(config)
+    handler = functools.partial(SiteHandler, directory=@str(out))
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=T)
+    thread.start()
+    base = `http://127.0.0.1:{httpd.server_port}`
+    !{
+      !& response = urlopen(base + "/") {
+        !? response.status == 200, "homepage status"
+        !? response.headers.get_content_type() == "text/html", "HTML MIME type"
+      }
+      !& css = urlopen(base + "/assets/style.css") {
+        !? css.status == 200, "CSS status"
+        !? css.headers.get_content_type() == "text/css", "CSS MIME type"
+      }
+      !& feed = urlopen(base + "/rss.xml") {
+        !? "xml" <- feed.headers.get_content_type(), "XML MIME type"
+      }
+      !{
+        urlopen(base + "/does-not-exist/")
+        !? F, "missing path should 404"
+      } !! e:HTTPError {
+        !? e.code == 404, "404 status"
+      }
+    } !: {
+      httpd.shutdown()
+      httpd.server_close()
+      thread.join(timeout=2.0)
+    }
+  } !: {
+    shutil.rmtree(out, ignore_errors=T)
+  }
+}

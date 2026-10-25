@@ -1,0 +1,103 @@
+@target(py)
+<tempfile, shutil
+<pathlib:{Path}
+
+@test_front_matter_scalars_and_lists {
+  text = `---\ntitle: "Quoted: title"\ndate: 2026-10-24\ndraft: true\ncount: 3\ntags: [myna, "static sites"]\n---\n\nBody here.\n`
+  fields, body = parse_front_matter(text, "test.md")
+  !? fields["title"] == "Quoted: title", "quoted value"
+  !? fields["draft"] === T, "boolean"
+  !? fields["count"] == 3, "integer"
+  !? fields["tags"] == ["myna", "static sites"], "inline list"
+  !? body.strip() == "Body here.", "body split"
+}
+
+@test_front_matter_errors {
+  !{
+    parse_front_matter("---\ntitle: x\n", "bad.md")
+    !? F, "missing close should fail"
+  } !! :ValueError {
+    _
+  }
+  !{
+    parse_front_matter("---\ntitle: a\ntitle: b\n---\n", "dup.md")
+    !? F, "duplicate key should fail"
+  } !! :ValueError {
+    _
+  }
+  !{
+    parse_front_matter("---\nnot a key\n---\n", "line.md")
+    !? F, "malformed line should fail"
+  } !! :ValueError {
+    _
+  }
+}
+
+@test_load_page_defaults_and_extra {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "post.md").write_text("---\ntitle: My Post\ndate: 2026-10-24\ntags: myna, tests\ncustom: hello\n---\n\nHello **world**.\n", encoding="utf-8")
+    page = load_page(root / "post.md", root, "post.md")
+    !? page.title == "My Post", "title"
+    !? page.type == "post", "dated file defaults to post"
+    !? page.slug == "my-post", "slug from title"
+    !? page.url == "/my-post/", "URL"
+    !? page.tags == ["myna", "tests"], "comma tags accepted"
+    !? page.extra["custom"] == "hello", "extra field"
+    !? page.extra.custom == "hello", "extra dot access"
+    !? page.reading_time == 1, "reading time"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
+@test_load_page_explicit_fields {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "index.md").write_text("---\ntitle: Home\nslug: ../../evil\ntype: page\nlayout: special.html\ndraft: true\n---\n\nHome.\n", encoding="utf-8")
+    page = load_page(root / "index.md", root, "index.md")
+    !? page.url == "/", "index maps to root"
+    !? page.slug == "evil", "traversal slug sanitized"
+    !? page.type == "page", "explicit type"
+    !? page.layout == "special.html", "explicit layout"
+    !? page.draft === T, "draft"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
+@test_load_page_validation {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "bad-date.md").write_text("---\ntitle: Bad\ndate: someday\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "bad-date.md", root, "bad-date.md")
+      !? F, "invalid date should fail"
+    } !! :ValueError {
+      _
+    }
+    (root / "no-title.md").write_text("---\ndate: 2026-01-01\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "no-title.md", root, "no-title.md")
+      !? F, "missing title should fail"
+    } !! :ValueError {
+      _
+    }
+    (root / "bad-type.md").write_text("---\ntitle: Bad\ntype: article\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "bad-type.md", root, "bad-type.md")
+      !? F, "invalid type should fail"
+    } !! :ValueError {
+      _
+    }
+    (root / "undated-post.md").write_text("---\ntitle: Undated\ntype: post\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "undated-post.md", root, "undated-post.md")
+      !? F, "post without date should fail"
+    } !! :ValueError {
+      _
+    }
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}

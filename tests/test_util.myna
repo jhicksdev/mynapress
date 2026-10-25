@@ -1,0 +1,70 @@
+@target(py)
+<pathlib:{Path}
+
+@test_slugify_basic {
+  !? slugify("Hello, World!") == "hello-world", "basic slugify"
+  !? slugify("  Spaces   and --- dashes  ") == "spaces-and-dashes", "collapse separators"
+  !? slugify("Café déjà vu") == "cafe-deja-vu", "ASCII folding"
+}
+
+@test_slugify_sanitizes_traversal {
+  !? slugify("../../etc/passwd") == "etc-passwd", "traversal must be sanitized"
+  !? slugify("..") == "untitled", "empty fallback"
+  !? ".." !<- slugify("../secret"), "no dot-dot left"
+  !? "/" !<- slugify("a/b"), "no slash left"
+  !? "\\" !<- slugify("a\\b"), "no backslash left"
+}
+
+@test_output_relpath {
+  !? output_relpath("/") == "index.html", "root"
+  !? output_relpath("/about/") == "about/index.html", "directory URL"
+  !? output_relpath("/style.css") == "style.css", "file URL"
+  !? output_relpath("/a/b.html?x=1") == "a/b.html", "query stripped"
+  !{
+    output_relpath("/../../etc/passwd")
+    !? F, "traversal should raise"
+  } !! :ValueError {
+    _
+  }
+}
+
+@test_escape_and_truncate {
+  !? html_escape('<a href="x">&') == "&lt;a href=&quot;x&quot;&gt;&amp;", "HTML escape"
+  !? truncate_text("abcdef", 3) == "abc…", "truncate"
+  !? truncate_text("abc", 3) == "abc", "no truncation needed"
+  !? truncate_text("abcdef", 4, "...") == "abcd...", "custom suffix"
+}
+
+@test_dates {
+  !? format_date("2026-10-24") == "Oct 24, 2026", "default format"
+  !? format_date("2026-10-24", "%Y-%m-%d") == "2026-10-24", "custom format"
+  !? iso_date("2026-10-24") == "2026-10-24", "ISO"
+  !? rfc822_date("2026-10-24") == "Sat, 24 Oct 2026 00:00:00 +0000", "RFC 822"
+  !? parse_date("not a date") === N, "invalid date"
+  !? format_date(N) == "", "missing date"
+}
+
+@test_pagination_math {
+  pages = paginate([1, 2, 3, 4, 5], 2)
+  !? #pages == 3, "page count"
+  !? pages[0] == [1, 2] && pages[2] == [5], "page slices"
+  !? paginate([], 2) == [[]], "empty site still has one page"
+  !? paginate([1, 2], 0) == [[1, 2]], "zero disables pagination"
+}
+
+@test_reading_time_and_words {
+  !? count_words("one two, three!") == 3, "word count"
+  !? reading_time("word " * 400) == 2, "reading time rounds up"
+  !? reading_time("") == 1, "minimum reading time"
+}
+
+@test_safe_join {
+  root = Path("/tmp/example")
+  !? @str(safe_join(root, "a/b.txt")) == "/tmp/example/a/b.txt", "safe join"
+  !{
+    safe_join(root, "../escape")
+    !? F, "traversal should raise"
+  } !! :ValueError {
+    _
+  }
+}

@@ -1,0 +1,160 @@
+@target(py)
+<re, hashlib, math, unicodedata
+<datetime:{datetime,date,timezone}
+<pathlib:{Path}
+
+$DotDict < dict {
+  @init(value:{s:A}) {
+    ..init(value)
+  }
+  @__getattr__(name:s) {
+    ^ .get(name)
+  }
+}
+
+@html_escape(value:A)->s {
+  s = @str(value)
+  ^ s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
+}
+
+@xml_escape(value:A)->s {
+  ^ html_escape(value)
+}
+
+@slugify(value:A, fallback:s="untitled")->s {
+  s = unicodedata.normalize("NFKD", @str(value)).encode("ascii", "ignore").decode("ascii").lower()
+  s = re.sub(_"[^a-z0-9]+", "-", s).strip("-")
+  s = re.sub(_"-{2,}", "-", s)
+  s = s[:80].strip("-")
+  ? s == "" {
+    ^ fallback
+  }
+  ^ s
+}
+
+@truncate_text(value:A, limit:i, suffix:s="…")->s {
+  s = @str(value)
+  ? limit <= 0 {
+    ^ ""
+  }
+  ? #s <= limit {
+    ^ s
+  }
+  ^ s[:limit].rstrip() + suffix
+}
+
+@sha256(value:A)->s {
+  ^ hashlib.sha256(@u8(@str(value))).hexdigest()
+}
+
+@parse_date(value:A)->A {
+  ? value === N || @str(value).strip() == "" {
+    ^ N
+  }
+  s = @str(value).strip()
+  ? #s >= 10 {
+    s = s[:10]
+  }
+  !{
+    ^ datetime.strptime(s, "%Y-%m-%d").date()
+  } !! :ValueError {
+    ^ N
+  }
+}
+
+@format_date(value:A, fmt:s="%b %d, %Y")->s {
+  d = parse_date(value)
+  ? d === N {
+    ^ ""
+  }
+  ^ d.strftime(fmt)
+}
+
+@rfc822_date(value:A)->s {
+  d = parse_date(value)
+  ? d === N {
+    ^ ""
+  }
+  ^ d.strftime("%a, %d %b %Y 00:00:00 +0000")
+}
+
+@iso_date(value:A)->s {
+  d = parse_date(value)
+  ? d === N {
+    ^ ""
+  }
+  ^ d.isoformat()
+}
+
+@reading_time(text:s, wpm:i=200)->i {
+  words = re.findall(_"\w+", text)
+  ^ @max(1, math.ceil(#words / wpm))
+}
+
+@paginate(items:[A], per_page:i)->[[A]] {
+  ? per_page <= 0 || #items == 0 {
+    ^ [items]
+  }
+  pages = []
+  % start <- 0..#items..per_page {
+    pages.append(items[start:start + per_page])
+  }
+  ^ pages
+}
+
+@url_for(base:s, path:s)->s {
+  ? base == "" {
+    ^ path
+  }
+  b = base.rstrip("/")
+  p = path.startswith("/") ? path : `/{path}`
+  ^ b + p
+}
+
+@output_relpath(url:s)->s {
+  u = url.strip()
+  ? "://" <- u {
+    u = re.sub(_"^[a-z]+://[^/]+", "", u)
+  }
+  ? "?" <- u {
+    u = u.split("?", 1)[0]
+  }
+  u = u.replace("\\", "/")
+  parts = [p | p <- u.split("/") ? p != ""]
+  ? @any([p == ".." | p <- parts]) {
+    !^ ValueError(`refusing path traversal in URL: {url}`)
+  }
+  ? @any([p <- (".", "") | p <- parts]) {
+    parts = [p | p <- parts ? p !<- (".", "")]
+  }
+  ? #parts == 0 || u.endswith("/") {
+    ^ #parts == 0 ? "index.html" : "/".join(parts) + "/index.html"
+  }
+  last = parts[-1]
+  ? "." !<- last {
+    ^ "/".join(parts) + "/index.html"
+  }
+  ^ "/".join(parts)
+}
+
+@strip_html(text:s)->s {
+  ^ re.sub(_"<[^>]*>", "", text)
+}
+
+@plain_summary(text:s, limit:i=200)->s {
+  flat = re.sub(_"\s+", " ", strip_html(text)).strip()
+  ^ truncate_text(flat, limit)
+}
+
+@count_words(text:s)->i {
+  ^ #re.findall(_"\w+", text)
+}
+
+@safe_join(root:Path, relative:s)->Path {
+  normalized = relative.replace("\\", "/")
+  parts = [p | p <- normalized.split("/") ? p !<- ("", ".")]
+  ? @any([p == ".." | p <- parts]) {
+    !^ ValueError(`refusing path traversal: {relative}`)
+  }
+  ^ root.joinpath(*parts)
+}

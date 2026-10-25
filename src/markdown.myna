@@ -1,0 +1,523 @@
+@target(py)
+<re
+
+@escape_attr(value:s)->s {
+  ^ html_escape(value)
+}
+
+@parse_link_target(raw:s)->(s, s) {
+  target = raw.strip()
+  ? target == "" {
+    ^ "", ""
+  }
+  ? target.startswith("<") {
+    close = target.find(">")
+    ? close > 1 {
+      dest = target[1:close]
+      rest = target[close + 1:].strip()
+      title = rest.strip('"').strip("'")
+      ^ dest, title
+    }
+  }
+  parts = target.split(None, 1)
+  dest = parts[0].strip('<>')
+  title = ""
+  ? #parts > 1 {
+    title = parts[1].strip().strip('"').strip("'")
+  }
+  lower = dest.lower()
+  ? lower.startswith("javascript:") || lower.startswith("data:text/html") {
+    ^ "", ""
+  }
+  ^ dest, title
+}
+
+@link_html(label:s, dest:s, title:s)->s {
+  ? dest == "" {
+    ^ render_inline(label)
+  }
+  title_attr = title == "" ? "" : ` title="{escape_attr(title)}"`
+  ^ `<a href="{escape_attr(dest)}"{title_attr}>{render_inline(label)}</a>`
+}
+
+@image_html(alt:s, dest:s, title:s)->s {
+  ? dest == "" {
+    ^ html_escape(alt)
+  }
+  title_attr = title == "" ? "" : ` title="{escape_attr(title)}"`
+  plain_alt = re.sub(_"[*_`]", "", alt)
+  ^ `<img src="{escape_attr(dest)}" alt="{escape_attr(plain_alt)}"{title_attr}>`
+}
+
+@render_inline(text:s)->s {
+  out = []
+  i = 0
+  n = #text
+  %? i < n {
+    ch = text[i]
+
+    ? ch == "\\" && i + 1 < n && text[i + 1] == "\n" {
+      out.append("<br>\n")
+      i += 2
+      ^>
+    }
+    ? ch == "\\" && i + 1 < n {
+      out.append(html_escape(text[i + 1]))
+      i += 2
+      ^>
+    }
+
+    ? ch == "`" {
+      run = 1
+      %? i + run < n && text[i + run] == "`" {
+        run += 1
+      }
+      marker = "`" * run
+      close = text.find(marker, i + run)
+      ? close >= 0 {
+        code = text[i + run:close].replace("\n", " ")
+        ? #code >= 2 && code.startswith(" ") && code.endswith(" ") && code.strip() != "" {
+          code = code[1:-1]
+        }
+        out.append(`<code>{html_escape(code)}</code>`)
+        i = close + run
+        ^>
+      }
+    }
+
+    ? ch == "!" && i + 1 < n && text[i + 1] == "[" {
+      j = i + 2
+      depth = 1
+      %? j < n {
+        ? text[j] == "[" {
+          depth += 1
+        } :? text[j] == "]" {
+          depth -= 1
+          ? depth == 0 {
+            ^!
+          }
+        }
+        j += 1
+      }
+      ? j + 1 < n && text[j + 1] == "(" {
+        k = j + 2
+        depth = 1
+        %? k < n {
+          ? text[k] == "(" {
+            depth += 1
+          } :? text[k] == ")" {
+            depth -= 1
+            ? depth == 0 {
+              ^!
+            }
+          }
+          k += 1
+        }
+        ? k < n {
+          dest, title = parse_link_target(text[j + 2:k])
+          out.append(image_html(text[i + 2:j], dest, title))
+          i = k + 1
+          ^>
+        }
+      }
+    }
+
+    ? ch == "[" {
+      j = i + 1
+      depth = 1
+      %? j < n {
+        ? text[j] == "[" {
+          depth += 1
+        } :? text[j] == "]" {
+          depth -= 1
+          ? depth == 0 {
+            ^!
+          }
+        }
+        j += 1
+      }
+      ? j + 1 < n && text[j + 1] == "(" {
+        k = j + 2
+        depth = 1
+        %? k < n {
+          ? text[k] == "(" {
+            depth += 1
+          } :? text[k] == ")" {
+            depth -= 1
+            ? depth == 0 {
+              ^!
+            }
+          }
+          k += 1
+        }
+        ? k < n {
+          dest, title = parse_link_target(text[j + 2:k])
+          out.append(link_html(text[i + 1:j], dest, title))
+          i = k + 1
+          ^>
+        }
+      }
+    }
+
+    ? ch == "<" {
+      rest = text[i:]
+      m = re.match(_"<([A-Za-z][A-Za-z0-9+.-]*:[^ >]+)>", rest)
+      ? m !== N {
+        dest = m.group(1)
+        out.append(`<a href="{escape_attr(dest)}">{html_escape(dest)}</a>`)
+        i += #m.group(0)
+        ^>
+      }
+      m = re.match(_"<([A-Za-z0-9.!#$%&'*+/=?^_{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>", rest)
+      ? m !== N {
+        addr = m.group(1)
+        out.append(`<a href="mailto:{escape_attr(addr)}">{html_escape(addr)}</a>`)
+        i += #m.group(0)
+        ^>
+      }
+      m = re.match(_"</?[A-Za-z][^>]*>|<!--.*?-->", rest)
+      ? m !== N {
+        out.append(m.group(0))
+        i += #m.group(0)
+        ^>
+      }
+    }
+
+    ? text.startswith("***", i) || text.startswith("___", i) {
+      marker = text[i:i + 3]
+      close = text.find(marker, i + 3)
+      ? close > i + 3 {
+        out.append(`<em><strong>{render_inline(text[i + 3:close])}</strong></em>`)
+        i = close + 3
+        ^>
+      }
+    }
+
+    ? text.startswith("**", i) || text.startswith("__", i) {
+      marker = text[i:i + 2]
+      close = text.find(marker, i + 2)
+      ? close > i + 2 && !text[i + 2].isspace() && !text[close - 1].isspace() {
+        out.append(`<strong>{render_inline(text[i + 2:close])}</strong>`)
+        i = close + 2
+        ^>
+      }
+    }
+
+    ? text.startswith("*", i) || text.startswith("_", i) {
+      marker = text[i]
+      close = text.find(marker, i + 1)
+      ? close > i + 1 && !text[i + 1].isspace() && !text[close - 1].isspace() {
+        before = i == 0 ? " " : text[i - 1]
+        after = close + 1 >= n ? " " : text[close + 1]
+        intraword = marker == "_" && (re.match(_"[A-Za-z0-9]", before) !== N) && (re.match(_"[A-Za-z0-9]", after) !== N)
+        ? !intraword {
+          out.append(`<em>{render_inline(text[i + 1:close])}</em>`)
+          i = close + 1
+          ^>
+        }
+      }
+    }
+
+    ? ch == "\n" {
+      hard = i >= 2 && text[i - 2] == " " && text[i - 1] == " "
+      ? hard {
+        out.pop()
+        out.pop()
+        out.append("<br>\n")
+      } : {
+        out.append("\n")
+      }
+      i += 1
+      ^>
+    }
+
+    out.append(html_escape(ch))
+    i += 1
+  }
+  ^ "".join(out)
+}
+
+@is_blank(line:s)->b {
+  ^ line.strip() == ""
+}
+
+@list_match(line:s)->A {
+  ^ re.match(_"^(\s*)([-+*]|\d+[.)])\s+(.*)$", line)
+}
+
+@is_list_line(line:s)->b {
+  ^ list_match(line) !== N
+}
+
+@is_hr(line:s)->b {
+  stripped = line.strip()
+  ? #stripped < 3 {
+    ^ F
+  }
+  ^ re.fullmatch(_"(?:\* *){3,}", stripped) !== N || re.fullmatch(_"(?:- *){3,}", stripped) !== N || re.fullmatch(_"(?:_ *){3,}", stripped) !== N
+}
+
+@fence_info(line:s)->A {
+  stripped = line.lstrip()
+  ? stripped.startswith("```") {
+    m = re.match(_"^(`{3,})(.*)$", stripped)
+    ^ m
+  }
+  ? stripped.startswith("~~~") {
+    m = re.match(_"^(~{3,})(.*)$", stripped)
+    ^ m
+  }
+  ^ N
+}
+
+@is_block_starter(line:s)->b {
+  stripped = line.lstrip()
+  ? fence_info(line) !== N {
+    ^ T
+  }
+  ? re.match(_"^#{1,6}\s+", stripped) !== N {
+    ^ T
+  }
+  ? is_hr(line) {
+    ^ T
+  }
+  ? stripped.startswith(">") {
+    ^ T
+  }
+  ? is_list_line(line) {
+    ^ T
+  }
+  ? stripped.startswith("<!--") || stripped.startswith("<!DOCTYPE") || stripped.startswith("<!doctype") {
+    ^ T
+  }
+  ? re.match(_"^</?[A-Za-z][A-Za-z0-9-]*(?:\s[^>]*)?>", stripped) !== N {
+    tag = re.match(_"^</?([A-Za-z][A-Za-z0-9-]*)", stripped)
+    ? tag !== N && tag.group(1).lower() <- ("address", "article", "aside", "blockquote", "body", "div", "dl", "fieldset", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "html", "iframe", "li", "main", "nav", "ol", "p", "pre", "script", "section", "style", "table", "ul") {
+      ^ T
+    }
+  }
+  ^ line.startswith("    ") || line.startswith("\t")
+}
+
+@tighten(html:s)->s {
+  ? html.startswith("<p>") {
+    close = html.find("</p>")
+    ? close >= 0 {
+      first = html[3:close]
+      rest = html[close + 4:].lstrip("\n")
+      ? rest == "" {
+        ^ first
+      }
+      ? rest.startswith("<ul>") || rest.startswith("<ol>") || rest.startswith("<blockquote>") || rest.startswith("<pre>") {
+        ^ first + "\n" + rest
+      }
+    }
+  }
+  ^ html
+}
+
+@render_list(lines:[s], start:i, end:i)->(s, i) {
+  first = list_match(lines[start])
+  base_indent = #first.group(1)
+  ordered = first.group(2)[-1] == "." || first.group(2)[-1] == ")"
+  start_num = ordered ? @int(re.sub(_"\D", "", first.group(2))) : 1
+  items = []
+  i = start
+  %? i < end {
+    m = list_match(lines[i])
+    ? m === N {
+      ^!
+    }
+    ? #m.group(1) != base_indent {
+      ^!
+    }
+    is_ordered = m.group(2)[-1] == "." || m.group(2)[-1] == ")"
+    ? is_ordered != ordered {
+      ^!
+    }
+    item_lines = [m.group(3)]
+    i += 1
+    %? i < end {
+      nxt = lines[i]
+      ? is_blank(nxt) {
+        item_lines.append("")
+        i += 1
+        ^>
+      }
+      indent = #nxt - #nxt.lstrip()
+      ? indent <= base_indent {
+        ^!
+      }
+      cut = @min(#nxt, base_indent + 2)
+      item_lines.append(nxt[cut:])
+      i += 1
+    }
+    inner, _ = render_blocks(item_lines, 0, #item_lines)
+    items.append(tighten(inner))
+  }
+  ? ordered && start_num != 1 {
+    body = "".join([`<li>{item}</li>\n` | item <- items])
+    ^ `<ol start="{start_num}">\n{body}</ol>`, i
+  }
+  tag = ordered ? "ol" : "ul"
+  body = "".join([`<li>{item}</li>\n` | item <- items])
+  ^ `<{tag}>\n{body}</{tag}>`, i
+}
+
+@render_blocks(lines:[s], start:i, end:i)->(s, i) {
+  out = []
+  i = start
+  %? i < end {
+    line = lines[i]
+    ? is_blank(line) {
+      i += 1
+      ^>
+    }
+
+    fi = fence_info(line)
+    ? fi !== N {
+      marker = fi.group(1)
+      info = fi.group(2).strip()
+      i += 1
+      code_lines = []
+      %? i < end {
+        ? lines[i].lstrip().startswith(marker) {
+          i += 1
+          ^!
+        }
+        code_lines.append(lines[i])
+        i += 1
+      }
+      code = "\n".join(code_lines)
+      ? code != "" {
+        code += "\n"
+      }
+      cls = ""
+      ? info != "" {
+        lang = info.split()[0]
+        cls = ` class="language-{escape_attr(lang)}"`
+      }
+      out.append(`<pre><code{cls}>{html_escape(code)}</code></pre>`)
+      ^>
+    }
+
+    heading = re.match(_"^(#{1,6})\s+(.*)$", line)
+    ? heading !== N {
+      level = #heading.group(1)
+      title = heading.group(2).rstrip("#").strip()
+      out.append(`<h{level}>{render_inline(title)}</h{level}>`)
+      i += 1
+      ^>
+    }
+
+    ? is_hr(line) {
+      out.append("<hr>")
+      i += 1
+      ^>
+    }
+
+    ? line.lstrip().startswith(">") {
+      quote_lines = []
+      %? i < end {
+        current = lines[i]
+        ? is_blank(current) {
+          ? i + 1 < end && lines[i + 1].lstrip().startswith(">") {
+            quote_lines.append("")
+            i += 1
+            ^>
+          }
+          ^!
+        }
+        ? !current.lstrip().startswith(">") {
+          ^!
+        }
+        stripped = current.lstrip()[1:]
+        ? stripped.startswith(" ") {
+          stripped = stripped[1:]
+        }
+        quote_lines.append(stripped)
+        i += 1
+      }
+      inner, _ = render_blocks(quote_lines, 0, #quote_lines)
+      out.append(`<blockquote>\n{inner}\n</blockquote>`)
+      ^>
+    }
+
+    ? is_list_line(line) {
+      indent = #line - #line.lstrip()
+      ? indent <= 3 {
+        rendered, next_i = render_list(lines, i, end)
+        out.append(rendered)
+        i = next_i
+        ^>
+      }
+    }
+
+    stripped = line.lstrip()
+    ? stripped.startswith("<!--") || stripped.startswith("<!DOCTYPE") || stripped.startswith("<!doctype") {
+      html_lines = []
+      %? i < end && !is_blank(lines[i]) {
+        html_lines.append(lines[i])
+        i += 1
+      }
+      out.append("\n".join(html_lines))
+      ^>
+    }
+
+    html_tag = re.match(_"^</?([A-Za-z][A-Za-z0-9-]*)(?:\s[^>]*)?>", stripped)
+    ? html_tag !== N && html_tag.group(1).lower() <- ("address", "article", "aside", "blockquote", "body", "div", "dl", "fieldset", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "html", "iframe", "li", "main", "nav", "ol", "p", "pre", "script", "section", "style", "table", "ul") {
+      html_lines = []
+      %? i < end && !is_blank(lines[i]) {
+        html_lines.append(lines[i])
+        i += 1
+      }
+      out.append("\n".join(html_lines))
+      ^>
+    }
+
+    ? line.startswith("    ") || line.startswith("\t") {
+      code_lines = []
+      %? i < end {
+        current = lines[i]
+        ? is_blank(current) {
+          code_lines.append("")
+          i += 1
+          ^>
+        }
+        ? current.startswith("    ") {
+          code_lines.append(current[4:])
+          i += 1
+          ^>
+        }
+        ? current.startswith("\t") {
+          code_lines.append(current[1:])
+          i += 1
+          ^>
+        }
+        ^!
+      }
+      code = "\n".join(code_lines).rstrip() + "\n"
+      out.append(`<pre><code>{html_escape(code)}</code></pre>`)
+      ^>
+    }
+
+    para_lines = [line]
+    i += 1
+    %? i < end {
+      ? is_blank(lines[i]) || is_block_starter(lines[i]) {
+        ^!
+      }
+      para_lines.append(lines[i])
+      i += 1
+    }
+    out.append(`<p>{render_inline("\n".join(para_lines))}</p>`)
+  }
+  ^ "\n".join(out), i
+}
+
+@render_markdown(text:s)->s {
+  normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+  lines = normalized.split("\n")
+  html, _ = render_blocks(lines, 0, #lines)
+  ^ html
+}

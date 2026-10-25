@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ site.title }}</h1>
+<p>{{ site.description }}</p>
+{{ content | safe }}
+<ul class="posts">
+{% for post in posts %}
+  <li><a href="{{ post.url }}">{{ post.title }}</a> <time>{{ post.date | date("%Y-%m-%d") }}</time></li>
+{% endfor %}
+</ul>
+{% if paginator.has_prev %}<a href="{{ paginator.prev }}">Newer</a>{% endif %}
+{% if paginator.has_next %}<a href="{{ paginator.next }}">Older</a>{% endif %}
+{% endblock %}
