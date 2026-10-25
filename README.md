@@ -1,4 +1,4 @@
-# MynaPress
+# <img src="favicon.svg" alt="MynaPress logo" width="32" height="32"> MynaPress
 
 [![CI](https://github.com/jhicksdev/mynapress/actions/workflows/ci.yml/badge.svg)](https://github.com/jhicksdev/mynapress/actions/workflows/ci.yml)
 
