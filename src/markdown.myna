@@ -511,7 +511,8 @@
       para_lines.append(lines[i])
       i += 1
     }
-    out.append(`<p>{render_inline("\n".join(para_lines))}</p>`)
+    para_text = "\n".join(para_lines)
+    out.append(`<p>{render_inline(para_text)}</p>`)
   }
   ^ "\n".join(out), i
 }

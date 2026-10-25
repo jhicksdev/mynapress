@@ -16,8 +16,8 @@ The short version:
 
 - Dataclasses, pattern matching, comprehensions, and error handling are pleasant and
   compact.
-- The missing `.myna` module import mechanism was the biggest architectural tax. Myna now
-  resolves sibling modules natively, and MynaPress uses ordinary relative imports.
+- The missing `.myna` module import mechanism was the biggest architectural tax. Myna
+  0.4.0 resolves sibling modules natively, and MynaPress uses ordinary relative imports.
 - Compound runtime type checks (`x :? [s]`) used to produce invalid Python. They now work,
   so the content model uses them directly.
 - Editable installs from the Myna source tree failed under setuptools' flat-layout

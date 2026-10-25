@@ -1,7 +1,8 @@
 # Myna gaps found while building MynaPress
 
 Reproductions were originally filed against Myna 0.3.0. All four entries below were
-re-checked against Myna `main` at `2ca0826` (2026-10-24).
+re-checked against Myna `main` at `2ca0826` (2026-10-24). The fixes ship in the
+`myna-lang` 0.4.0 package.
 
 | Gap | Status |
 | :-- | :-- |

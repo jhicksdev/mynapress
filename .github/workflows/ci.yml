@@ -13,9 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Myna
-        # MynaPress needs the sibling .myna module loader added after the 0.3.0
-        # release tag. The package version at this commit is still 0.3.0.
-        run: python -m pip install "myna-lang @ git+https://github.com/jhicksdev/myna.git@2ca0826"
+        run: python -m pip install myna-lang==0.4.0
       - name: Run MynaPress tests
         run: python -m myna run tests/run_tests.myna
       - name: Build fixture site

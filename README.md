@@ -7,8 +7,8 @@ with collections, tags, pagination, RSS, a sitemap, a dev server, and watch mode
 zero runtime dependencies beyond [`myna-lang`](https://pypi.org/project/myna-lang/) and the
 Python standard library.
 
-It is also a dogfooding experiment: the project exists to test whether Myna 0.3.0 is ready
-for real work. The friction found along the way is documented in [`GAPS.md`](GAPS.md), not
+It is also a dogfooding experiment: the project exists to test whether Myna is ready for
+real work. The friction found along the way is documented in [`GAPS.md`](GAPS.md), not
 hidden.
 
 ## Status
@@ -22,13 +22,12 @@ committed; CI builds it.
 ## Requirements and installation
 
 - Python 3.11 or newer.
-- A current Myna 0.3.0 build with multi-file `.myna` module resolution (`myna run` must
-  support sibling imports such as `<.util:{slugify}`).
+- Myna 0.4.0+ with multi-file `.myna` module resolution (`myna run` must support sibling
+  imports such as `<.util:{slugify}`).
 
 ```bash
-pipx install myna-lang
-# or, until the next PyPI release includes the module loader:
-pipx install "git+https://github.com/jhicksdev/myna.git@2ca0826"
+uv tool install myna-lang==0.4.0
+# or: pipx install myna-lang==0.4.0
 ```
 
 Clone this repository and run from its root:
@@ -302,9 +301,9 @@ imports:
 
 `myna run` resolves those imports lazily from `src/`, so modules have real namespaces,
 normal Python tooling works, and the tests can import or inspect them independently. The
-loader workaround used during the Myna 0.3.0 evaluation has been removed now that upstream
-Myna supports sibling `.myna` modules; the history and the four original reproductions are
-in `GAPS.md`.
+loader workaround used during the original Myna 0.3.0 evaluation has been removed now that
+Myna 0.4.0 supports sibling `.myna` modules; the history and the four original
+reproductions are in `GAPS.md`.
 
 ## Known limitations
 
@@ -315,7 +314,7 @@ in `GAPS.md`.
 - Raw HTML is trusted and passed through.
 - Tag pages are not paginated.
 - No feeds/sitemap unless `base_url` is configured.
-- Requires a Myna build with native `.myna` module resolution (current main / next release).
+- Requires Myna 0.4.0+ for native `.myna` module resolution.
 - No committed generated HTML. CI builds the docs.
 
 More detail is in the generated docs under `content/limitations.md` and in `GAPS.md`.

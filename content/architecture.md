@@ -42,8 +42,8 @@ module namespaces and ordinary Python tooling. It also lets the test harness imp
 module directly instead of executing everything into one shared dictionary.
 
 The first MynaPress build used a custom exec-based loader because Myna 0.3.0 could not
-resolve sibling `.myna` modules. That workaround is gone. The original gap reports and
-their upstream fixes are recorded in `GAPS.md`.
+resolve sibling `.myna` modules. Myna 0.4.0 shipped the native loader, so that workaround
+is gone. The original gap reports and their upstream fixes are recorded in `GAPS.md`.
 
 ## Data flow
 
