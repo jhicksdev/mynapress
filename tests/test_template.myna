@@ -58,6 +58,20 @@
   }
 }
 
+@test_multilevel_extends {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "grand.html").write_text("<title>{% block title %}Grand{% endblock %}</title><main>{% block content %}Grand{% endblock %}</main>", encoding="utf-8")
+    (root / "parent.html").write_text('{% extends "grand.html" %}{% block title %}Parent{% endblock %}{% block content %}Parent{% endblock %}', encoding="utf-8")
+    (root / "child.html").write_text('{% extends "parent.html" %}{% block title %}Child{% endblock %}{% block content %}Child content{% endblock %}', encoding="utf-8")
+    html = render_template("child.html", {}, root)
+    !? "<title>Child</title>" <- html, "most-derived title block wins"
+    !? "<main>Child content</main>" <- html, "most-derived content block wins"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
 @test_template_errors_have_file_and_line {
   root = Path(tempfile.mkdtemp())
   !{

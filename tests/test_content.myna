@@ -97,6 +97,51 @@
     } !! :ValueError {
       _
     }
+    (root / "trailing-date.md").write_text("---\ntitle: Trailing\ndate: 2026-01-01junk\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "trailing-date.md", root, "trailing-date.md")
+      !? F, "trailing date text should fail"
+    } !! :ValueError {
+      _
+    }
+    (root / "null-title.md").write_text("---\ntitle: null\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "null-title.md", root, "null-title.md")
+      !? F, "null title should fail"
+    } !! :ValueError {
+      _
+    }
+    (root / "numeric-title.md").write_text("---\ntitle: 42\n---\n", encoding="utf-8")
+    !{
+      load_page(root / "numeric-title.md", root, "numeric-title.md")
+      !? F, "non-string title should fail"
+    } !! :ValueError {
+      _
+    }
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
+@test_nested_index_and_filename_fallback {
+  root = Path(tempfile.mkdtemp())
+  !{
+    (root / "notes").mkdir()
+    (root / "notes" / "index.md").write_text("---\ntitle: Notes Index\n---\n\nNotes.\n", encoding="utf-8")
+    nested = load_page(root / "notes" / "index.md", root, "notes/index.md")
+    !? nested.url == "/notes-index/", "only the root index.md maps to /"
+
+    (root / "fallback.md").write_text("---\ntitle: \"!!!\"\n---\n\nFallback.\n", encoding="utf-8")
+    fallback = load_page(root / "fallback.md", root, "fallback.md")
+    !? fallback.slug == "fallback", "slug falls back to the filename"
+
+    (root / "custom.md").write_text("---\ntitle: Custom\nslug: \"!\"\n---\n\nCustom.\n", encoding="utf-8")
+    !{
+      load_page(root / "custom.md", root, "custom.md")
+      !? F, "unusable explicit slug should fail"
+    } !! :ValueError {
+      _
+    }
   } !: {
     shutil.rmtree(root, ignore_errors=T)
   }

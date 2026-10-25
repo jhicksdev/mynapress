@@ -41,6 +41,8 @@
   !? iso_date("2026-10-24") == "2026-10-24", "ISO"
   !? rfc822_date("2026-10-24") == "Sat, 24 Oct 2026 00:00:00 +0000", "RFC 822"
   !? parse_date("not a date") === N, "invalid date"
+  !? parse_date("2026-10-24junk") === N, "trailing date text is invalid"
+  !? parse_date("2026-1-1") === N, "dates must be zero-padded YYYY-MM-DD"
   !? format_date(N) == "", "missing date"
 }
 

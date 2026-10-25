@@ -2,14 +2,14 @@
 <sys, shutil
 <pathlib:{Path}
 <datetime:{date}
-<.config:{SiteConfig, load_config, site_path}
+<.config:{SiteConfig, load_config, site_path, assert_safe_output, assert_output_target}
 <.content:{new_document}
 <.server:{print_build, serve_site}
 <.site:{build_site}
 <.util:{slugify}
 
 @usage()->s {
-  ^ "MynaPress — a small static site generator written in Myna\n\nUsage:\n  myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]\n  myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--drafts]\n  myna run src/main.myna new \"Post title\" [--config site.toml]\n  myna run src/main.myna clean [--config site.toml]\n"
+  ^ "MynaPress — a small static site generator written in Myna\n\nUsage:\n  myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]\n  myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]\n  myna run src/main.myna new \"Post title\" [--config site.toml]\n  myna run src/main.myna clean [--config site.toml]\n"
 }
 
 @take_value(args:[s], index:i, option:s)->s {
@@ -31,6 +31,7 @@
 
 @cmd_build(args:[s])->i {
   config_path = "site.toml"
+  config_explicit = F
   src = ""
   out = ""
   drafts = F
@@ -43,6 +44,7 @@
     } :? arg == "--config" {
       i += 1
       config_path = take_value(args, i, arg)
+      config_explicit = T
     } :? arg == "--src" {
       i += 1
       src = take_value(args, i, arg)
@@ -56,7 +58,7 @@
     }
     i += 1
   }
-  config = apply_overrides(load_config(config_path), src, out)
+  config = apply_overrides(load_config(config_path, config_explicit), src, out)
   result = build_site(config, drafts)
   print_build(result)
   ^ 0
@@ -64,6 +66,7 @@
 
 @cmd_serve(args:[s])->i {
   config_path = "site.toml"
+  config_explicit = F
   src = ""
   out = ""
   port = 8000
@@ -78,6 +81,7 @@
     } :? arg == "--config" {
       i += 1
       config_path = take_value(args, i, arg)
+      config_explicit = T
     } :? arg == "--src" {
       i += 1
       src = take_value(args, i, arg)
@@ -104,12 +108,13 @@
     }
     i += 1
   }
-  config = apply_overrides(load_config(config_path), src, out)
+  config = apply_overrides(load_config(config_path, config_explicit), src, out)
   ^ serve_site(config, port, watch, drafts)
 }
 
 @cmd_new(args:[s])->i {
   config_path = "site.toml"
+  config_explicit = F
   words = []
   i = 0
   %? i < #args {
@@ -120,6 +125,7 @@
     } :? arg == "--config" {
       i += 1
       config_path = take_value(args, i, arg)
+      config_explicit = T
     } : {
       words.append(arg)
     }
@@ -129,7 +135,7 @@
   ? title == "" {
     !^ ValueError("new needs a title, for example: new \"My first post\"")
   }
-  config = load_config(config_path)
+  config = load_config(config_path, config_explicit)
   content_dir = site_path(config, config.content_dir)
   content_dir.mkdir(parents=True, exist_ok=True)
   slug = slugify(title)
@@ -148,6 +154,7 @@
 
 @cmd_clean(args:[s])->i {
   config_path = "site.toml"
+  config_explicit = F
   i = 0
   %? i < #args {
     arg = args[i]
@@ -157,17 +164,16 @@
     } :? arg == "--config" {
       i += 1
       config_path = take_value(args, i, arg)
+      config_explicit = T
     } : {
       !^ ValueError(`unknown clean option: {arg}`)
     }
     i += 1
   }
-  config = load_config(config_path)
+  config = load_config(config_path, config_explicit)
   out_dir = site_path(config, config.output_dir)
-  out_text = @str(out_dir.resolve())
-  ? out_text == "/" || out_text == @str(Path(config.root).resolve()) {
-    !^ ValueError(`refusing to clean unsafe output directory: {out_dir}`)
-  }
+  assert_safe_output(config, out_dir, T)
+  assert_output_target(out_dir, "remove", T)
   ? out_dir.exists() {
     shutil.rmtree(out_dir)
     p(`Removed {out_dir}`)

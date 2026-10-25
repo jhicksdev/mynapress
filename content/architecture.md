@@ -51,7 +51,8 @@ is gone. The original gap reports and their upstream fixes are recorded in `GAPS
 2. `content.myna` discovers Markdown and parses front matter into `Page` dataclasses.
 3. `markdown.myna` renders each body to HTML.
 4. `site.myna` filters drafts, sorts posts, groups tags, paginates, renders templates, and
-   writes output plus feeds.
+   writes into a staged directory. It swaps that directory into place only after success,
+   so a failed build leaves the previous output intact.
 5. `server.myna` serves the output and rebuilds on file changes.
 
 ## Tests
@@ -59,6 +60,6 @@ is gone. The original gap reports and their upstream fixes are recorded in `GAPS
 `tests/run_tests.myna` installs a scoped finder for `src/`, imports the application
 modules, discovers `test_*.myna` files, and runs every `test_*` function. It prints
 `PASS`/`FAIL` with the assertion detail and exits non-zero on failure. Coverage includes
-slugs and traversal, front matter, Markdown blocks and inlines, escaping, template filters
-and layouts, errors, dates, pagination, feeds, fixture builds, drafts, MIME types, 404s,
-and CLI cleanup.
+slugs and traversal, front matter, Markdown blocks and inlines, escaping, template filters,
+layouts and inheritance, errors, dates, pagination, feeds, fixture builds, drafts, MIME
+types, 404s, CLI cleanup, output path safety, and failed-build preservation.

@@ -432,7 +432,7 @@ $$Token(kind:s, value:s, line:i)
       template_error(filename, extension["line"], `parent template not found: {parent}`)
     }
     parent_source = parent_path.read_text(encoding="utf-8")
-    ^ render_source(parent_source, parent, root, ctx, child_blocks, stack + [parent])
+    ^ render_source(parent_source, parent, root, ctx, {**child_blocks, **overrides}, stack + [parent])
   }
   ^ render_nodes(nodes, ctx, filename, root, overrides, stack)
 }

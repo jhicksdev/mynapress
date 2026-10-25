@@ -115,6 +115,92 @@
   }
 }
 
+@make_minimal_site(root:Path)->SiteConfig {
+  site = root / "site"
+  (site / "content").mkdir(parents=True)
+  (site / "templates").mkdir()
+  (site / "site.toml").write_text('title = "Minimal Site"\n', encoding="utf-8")
+  (site / "content" / "index.md").write_text("---\ntitle: Home\n---\n\nOld home.\n", encoding="utf-8")
+  (site / "templates" / "page.html").write_text("{% extends \"base.html\" %}{% block content %}<h1>{{ page.title }}</h1>{{ content | safe }}{% endblock %}", encoding="utf-8")
+  (site / "templates" / "base.html").write_text("<main>{% block content %}{% endblock %}</main>", encoding="utf-8")
+  ^ load_config(@str(site / "site.toml"))
+}
+
+@test_output_path_safety {
+  root = Path(tempfile.mkdtemp())
+  !{
+    config = make_minimal_site(root)
+    site = Path(config.root)
+    content_index = site / "content" / "index.md"
+
+    config.output_dir = @str(site)
+    !{
+      build_site(config)
+      !? F, "site root output must be refused"
+    } !! :ValueError {
+      _
+    }
+    !? content_index.exists(), "site root preserved"
+
+    config.output_dir = @str(site / "content" / "build")
+    !{
+      build_site(config)
+      !? F, "output inside content must be refused"
+    } !! :ValueError {
+      _
+    }
+    !? content_index.exists(), "content preserved"
+
+    unmarked = root / "unmarked"
+    unmarked.mkdir()
+    (unmarked / "keep.txt").write_text("keep\n", encoding="utf-8")
+    config.output_dir = @str(unmarked)
+    !{
+      build_site(config)
+      !? F, "unmarked output must be refused"
+    } !! :ValueError {
+      _
+    }
+    !? (unmarked / "keep.txt").exists(), "unmarked directory preserved"
+
+    empty = root / "empty-out"
+    empty.mkdir()
+    config.output_dir = @str(empty)
+    build_site(config)
+    !? (empty / "index.html").exists(), "empty output initialized"
+    !? (empty / output_marker()).exists(), "empty output marked after build"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
+@test_failed_build_preserves_output {
+  root = Path(tempfile.mkdtemp())
+  !{
+    config = make_minimal_site(root)
+    out = root / "out"
+    config.output_dir = @str(out)
+    build_site(config)
+    before = (out / "index.html").read_text(encoding="utf-8")
+    !? (out / output_marker()).exists(), "output is marked"
+
+    (Path(config.root) / "content" / "broken.md").write_text("---\ntitle: Broken\ndate: someday\n---\n\nBroken.\n", encoding="utf-8")
+    !{
+      build_site(config)
+      !? F, "invalid content must fail"
+    } !! :ValueError {
+      _
+    }
+    after = (out / "index.html").read_text(encoding="utf-8")
+    !? before == after, "previous output preserved after failed build"
+    !? (out / output_marker()).exists(), "marker preserved"
+    !? #@list(root.glob(".mynapress-build-*")) == 0, "failed build leaves no staging directory"
+    !? #@list(root.glob(".mynapress-backup-*")) == 0, "successful swap leaves no backup directory"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
 @test_config_validation {
   root = Path(tempfile.mkdtemp())
   !{
@@ -151,6 +237,14 @@
     !{
       load_config(@str(bad))
       !? F, "bad base_url should fail"
+    } !! :ValueError {
+      _
+    }
+    missing = root / "missing.toml"
+    !? load_config(@str(missing)).title == "MynaPress", "missing default config uses defaults"
+    !{
+      load_config(@str(missing), T)
+      !? F, "explicit missing config should fail"
     } !! :ValueError {
       _
     }

@@ -20,6 +20,7 @@
     out = root / "build"
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text("x", encoding="utf-8")
+    (out / output_marker()).write_text("generated\n", encoding="utf-8")
     cache = root / ".mynapress-cache.json"
     cache.write_text("{}", encoding="utf-8")
     code = run_cli(["clean", "--config", @str(config)])
@@ -29,6 +30,42 @@
 
     !? run_cli(["unknown"]) == 2, "unknown command exits 2"
     !? run_cli([]) == 0, "no arguments prints usage"
+    repo = Path(__file__).resolve().parent.parent
+    !? run_cli(["build", "--config", @str(root / "missing.toml"), "--src", @str(repo / "fixtures" / "site" / "content"), "--out", @str(root / "missing-out")]) == 1, "explicit missing build config exits 1"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
+@test_clean_refuses_unsafe_outputs {
+  root = Path(tempfile.mkdtemp())
+  !{
+    site = root / "site"
+    site.mkdir()
+    config = site / "site.toml"
+    victim = root / "victim"
+    victim.mkdir()
+    (victim / "important.txt").write_text("keep\n", encoding="utf-8")
+    config.write_text(`title = "Clean Test"\noutput_dir = "{victim}"\n`, encoding="utf-8")
+    !? run_cli(["clean", "--config", @str(config)]) == 1, "external output must be refused"
+    !? (victim / "important.txt").exists(), "external directory preserved"
+
+    empty_out = site / "empty"
+    empty_out.mkdir()
+    config.write_text('title = "Clean Test"\noutput_dir = "empty"\n', encoding="utf-8")
+    !? run_cli(["clean", "--config", @str(config)]) == 1, "empty unmarked output must be refused"
+    !? empty_out.exists(), "empty unmarked directory preserved"
+
+    local_out = site / "out"
+    local_out.mkdir()
+    (local_out / "keep.txt").write_text("keep\n", encoding="utf-8")
+    config.write_text('title = "Clean Test"\noutput_dir = "out"\n', encoding="utf-8")
+    !? run_cli(["clean", "--config", @str(config)]) == 1, "unmarked output must be refused"
+    !? (local_out / "keep.txt").exists(), "unmarked directory preserved"
+
+    (local_out / output_marker()).write_text("generated\n", encoding="utf-8")
+    !? run_cli(["clean", "--config", @str(config)]) == 0, "marked output is removable"
+    !? !local_out.exists(), "marked output removed"
   } !: {
     shutil.rmtree(root, ignore_errors=T)
   }

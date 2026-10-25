@@ -7,6 +7,9 @@ MynaPress v0.1 is deliberately small. These are the known limitations, stated pl
 
 - **Full rebuilds only.** There is no incremental cache. A 500-page site is expected to
   build in a couple of seconds, but every build rewrites everything.
+- **Protected output locations.** Build refuses to replace a non-empty unmarked directory,
+  `clean` removes only marked output, and `clean` only works inside the site root. External
+  output can be built but must be removed manually.
 - **Flat post URLs.** Posts live at `/<slug>/`, not `/YYYY/MM/<slug>/`. Nested source
   folders are allowed but do not affect URLs.
 - **One site per invocation.** No multi-site builds, themes marketplace, plugins, search

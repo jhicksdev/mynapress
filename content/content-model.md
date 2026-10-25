@@ -35,6 +35,7 @@ another_key: true
 - Inline lists `[a, b]` are supported. Items may be quoted. `tags: myna, tests` is also
   accepted as a convenience.
 - Blank lines and lines starting with `#` inside front matter are ignored.
+- `title` must be a non-empty string, and `date` must be exactly `YYYY-MM-DD`.
 - Duplicate keys, malformed lines, and missing closing delimiters are errors that name the
   source file and line.
 - There is no block YAML, no nested mapping syntax, and no multi-line scalar.
@@ -48,7 +49,7 @@ Unknown keys are collected in `page.extra`. In templates use `{{ page.extra.arbi
 | `title` | string | **Required.** |
 | `date` | `YYYY-MM-DD` | Makes the file a post by default. Invalid dates are errors. |
 | `slug` | string | Defaults to the title, then the filename. Always sanitised. |
-| `tags` | list | Drives `/tags/<tag>/` pages. |
+| `tags` | list | Drives `/tags/<tag>/` pages for posts. |
 | `draft` | boolean | Excluded from builds unless `--drafts`. |
 | `layout` | string | Template filename. Defaults to `post.html` for posts and `page.html` for pages. |
 | `type` | `page` or `post` | Defaults to `post` when `date` is present, otherwise `page`. An explicit `type: post` requires `date`. |
@@ -56,7 +57,7 @@ Unknown keys are collected in `page.extra`. In templates use `{{ page.extra.arbi
 ## Derived values available in templates
 
 - `page.slug` — lowercase, ASCII-folded, hyphenated.
-- `page.url` — `/` for `index.md`, otherwise `/<slug>/`.
+- `page.url` — `/` for the root `index.md`, otherwise `/<slug>/`.
 - `page.reading_time` — minutes at 200 words per minute, minimum 1.
 - `page.extra` — unknown front matter fields.
 - `page.source` — source filename for error messages.
@@ -72,6 +73,7 @@ Pages do not participate in post collections. Posts are sorted by `(date, slug)`
 first. The homepage receives `posts` (the current page of posts), `all_posts` (everything),
 and paginator fields. Tag pages receive `tag` and that tag's posts.
 
-If `content/index.md` exists it renders to `/`; otherwise MynaPress generates a simple
-homepage from `index.html` if available, or a built-in list fallback. Posts also remain
+If the root `content/index.md` exists it renders to `/`; otherwise MynaPress generates a
+simple homepage from `index.html` if available, or a built-in list fallback. A nested
+`index.md` is treated like any other page and gets its normal slug URL. Posts also remain
 available at their own URLs.

@@ -13,9 +13,14 @@ title: Getting started
   # or: pipx install myna-lang==0.4.0
   ```
 
-- MynaPress itself. Clone this repository and run it from its root. No package install is
+- MynaPress itself. Clone the repository and run it from its root. No package install is
   needed for MynaPress: the source lives in `src/` and `bin/mynapress` is a convenience
   wrapper.
+
+  ```bash
+  git clone https://github.com/jhicksdev/mynapress.git
+  cd mynapress
+  ```
 
 For a local Myna checkout, install it editable once and activate a virtual environment:
 
@@ -24,6 +29,9 @@ uv venv .venv
 uv pip install --python .venv/bin/python -e /path/to/myna
 source .venv/bin/activate
 ```
+
+Alternatively, run `bin/mynapress` with `MYNA_SRC=/path/to/myna`; if no `myna` command is
+available, the wrapper exits with a clear error instead of guessing a local path.
 
 ## A minimal site
 
@@ -104,9 +112,9 @@ changes.
 myna run src/main.myna new "A first post"
 ```
 
-This writes `content/YYYY-MM-DD-a-first-post.md` with front matter. Add a `date` and it
-becomes a post automatically; posts are collected newest-first on the generated homepage
-and participate in tag pages, pagination, and RSS.
+This writes `content/YYYY-MM-DD-a-first-post.md` with front matter, including a `date`, so
+it is a post immediately. Posts are collected newest-first on the generated homepage and
+participate in tag pages, pagination, and RSS.
 
 ## Project layout
 

@@ -1,5 +1,7 @@
 # MynaPress
 
+[![CI](https://github.com/jhicksdev/mynapress/actions/workflows/ci.yml/badge.svg)](https://github.com/jhicksdev/mynapress/actions/workflows/ci.yml)
+
 A small, dependency-free static site generator written **entirely in Myna**.
 
 MynaPress takes Markdown with front matter and produces a fast, self-contained HTML site
@@ -14,7 +16,9 @@ hidden.
 ## Status
 
 v0.1 targets Python 3.11+ only. Every source file declares `@target(py)`. There is no
-pretend JavaScript/Node support. Builds are full rebuilds; see [Limitations](#known-limitations).
+pretend JavaScript/Node support. Builds are full rebuilds, but each build is staged in a
+temporary directory and swapped into place only on success; see
+[Known limitations](#known-limitations).
 
 The documentation site in `content/` is built by MynaPress itself. Generated HTML is not
 committed; CI builds it.
@@ -33,6 +37,8 @@ uv tool install myna-lang==0.4.0
 Clone this repository and run from its root:
 
 ```bash
+git clone https://github.com/jhicksdev/mynapress.git
+cd mynapress
 myna run src/main.myna build
 ```
 
@@ -47,7 +53,9 @@ myna run src/main.myna build
 ```
 
 The `bin/mynapress` wrapper is a developer convenience. It prefers `myna` on `PATH`, then
-the repository `.venv`, then `MYNA_SRC` with `python3 -m myna`.
+the repository `.venv`, then an installed `python3 -m myna`. For a local Myna checkout,
+set `MYNA_SRC=/path/to/myna`; if no Myna installation is found, the wrapper exits with a
+clear error.
 
 ## Quick start
 
@@ -107,18 +115,26 @@ myna run src/main.myna clean [--config site.toml]
 ```
 
 - `build` prints a concise summary: pages, posts, tag pages, assets, warnings, duration.
+  It builds into a temporary sibling directory and swaps it into place only after a
+  successful build, so a failed build preserves the previous output.
 - `serve` builds first, serves `--out` with `http.server`, uses stdlib MIME types, returns
   404 for unknown paths, and `--watch` polls for changes and rebuilds.
 - `new` writes `content/YYYY-MM-DD-<slug>.md` with front matter and avoids overwriting.
-- `clean` removes the output directory and `.mynapress-cache.json`.
-- Content/config/template errors exit non-zero with `error: file:line: message`, not a raw
-  traceback.
+- `clean` removes a MynaPress output directory inside the site root and
+  `.mynapress-cache.json`. It refuses output outside the site root and directories that
+  were not created by MynaPress.
+- Content and template errors exit non-zero with `error: file:line: message` where a line
+  is available; config errors identify the config file. Raw content errors are not dumped
+  as tracebacks.
+- An explicitly supplied `--config` path must exist. If `site.toml` is absent and no
+  `--config` was supplied, defaults are used.
 - Unknown commands exit 2.
 
 ## Content model
 
 Markdown files are discovered recursively in `content/`. Only `.md` is read. Nested folders
-are allowed for organisation; URLs are currently flat (`/<slug>/`, or `/` for `index.md`).
+are allowed for organisation; URLs are currently flat (`/<slug>/`, or `/` for the root
+`index.md`).
 
 ### Front matter: supported YAML subset
 
@@ -157,7 +173,7 @@ with file and line information.
 | `title` | string | Required. |
 | `date` | `YYYY-MM-DD` | Makes the item a post by default. |
 | `slug` | string | Defaults to title, then filename. Sanitised. |
-| `tags` | list | Creates `/tags/<tag>/` pages. |
+| `tags` | list | Creates `/tags/<tag>/` pages from posts. |
 | `draft` | boolean | Excluded unless `--drafts`. |
 | `layout` | string | Template filename; defaults to `post.html` or `page.html`. |
 | `type` | `page` or `post` | Defaults to `post` when dated, otherwise `page`. An explicit `type: post` requires `date`. |
@@ -243,14 +259,27 @@ your own sanitisation if content is untrusted.
 
 Relative paths in `site.toml` resolve from the config file's directory. CLI `--src`/`--out`
 resolve from the current directory. Unknown keys, wrong types, a missing title, a bad
-`base_url`, negative pagination, and TOML errors fail with a clear message.
+`base_url`, negative pagination, and TOML errors fail with a clear message. If
+`site.toml` is absent and no `--config` was supplied, defaults are used; an explicit
+`--config` path that does not exist is an error.
+
+Output directories are protected:
+
+- The output may not be the site root, contain the site root, or overlap `content_dir`,
+  `templates_dir`, or `static_dir`.
+- Builds are staged in a temporary sibling and swapped into place only after success. A
+  content or template error leaves the previous output untouched.
+- A non-empty existing output directory must contain `.mynapress-output`, the marker
+  written by MynaPress. Build may initialize an empty directory, but refuses to replace a
+  non-empty unmarked one; `clean` removes only marked output.
+- `clean` only removes output directories inside the site root.
 
 Assembly behaviour:
 
 - Static files keep their directory name (`assets/style.css` → `build/assets/style.css`).
 - `favicon.ico`, `favicon.png`, or `favicon.svg` at the site root is copied to the output.
-- `content/index.md` renders `/`; otherwise a homepage is generated from `index.html` or a
-  minimal built-in fallback.
+- `content/index.md` renders `/`; a nested `index.md` gets a normal slug URL. Otherwise a
+  homepage is generated from `index.html` or a minimal built-in fallback.
 - Posts generate tag pages and optional `/page/2/` pagination.
 - With `base_url`, MynaPress emits RSS 2.0 (`rss.xml`), `sitemap.xml`, and `robots.txt` with
   absolute URLs.
@@ -272,10 +301,14 @@ myna run src/main.myna build --config fixtures/blog/site.toml
 myna run src/main.myna build
 ```
 
+CI runs the tests and builds the fixture and documentation sites on Python 3.11 and 3.12.
+
 Tests cover slugify (Unicode, punctuation, traversal), front matter (quoted values, lists,
 malformed input, unknown keys), Markdown block/inline forms and escaping, template filters
-and layouts, missing variables and malformed tags, dates, pagination, config validation,
-fixture builds, drafts, tags, expected output, MIME types, 404s, and CLI cleanup.
+and layouts, multi-level inheritance, missing variables and malformed tags, dates,
+pagination, config validation, explicit missing config, fixture builds, drafts, tags,
+expected output, output path safety, failed-build preservation, MIME types, 404s, and CLI
+cleanup.
 
 ### Architecture
 
@@ -308,6 +341,8 @@ reproductions are in `GAPS.md`.
 ## Known limitations
 
 - Full rebuilds only; no incremental cache. Stale output is worse than a slow build.
+- `clean` refuses output directories outside the site root. External output can still be
+  built, but remove it manually.
 - Flat post URLs; nested source folders do not affect URLs.
 - Python target only; no Node target.
 - Small YAML subset, CommonMark-ish Markdown, no tables/footnotes/smart punctuation/highlighting.
@@ -321,5 +356,4 @@ More detail is in the generated docs under `content/limitations.md` and in `GAPS
 
 ## License
 
-Not chosen yet. The project owner should choose a license before publishing. No license
-file is included, so all rights are reserved by default.
+MIT. See [LICENSE](LICENSE).

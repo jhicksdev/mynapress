@@ -159,32 +159,43 @@ $$Page(
     !^ ValueError(`{source_label}: could not read content file: {e}`)
   }
   fields, body = parse_front_matter(text, source_label)
-  ? !("title" <- fields) || @str(fields["title"]).strip() == "" {
-    !^ ValueError(`{source_label}: missing required front matter field 'title'`)
+  ? !("title" <- fields) {
+    !^ ValueError(`{source_label}:1: missing required front matter field 'title'`)
   }
-  title = @str(fields["title"]).strip()
+  ? !(fields["title"] :? s) {
+    !^ ValueError(`{source_label}:1: front matter field 'title' must be a string`)
+  }
+  title = fields["title"].strip()
+  ? title == "" {
+    !^ ValueError(`{source_label}:1: missing required front matter field 'title'`)
+  }
   date_value = as_string(fields, "date", "")
   ? date_value != "" {
     parsed = parse_date(date_value)
     ? parsed === N {
-      !^ ValueError(`{source_label}: invalid date '{date_value}' (expected YYYY-MM-DD)`)
+      !^ ValueError(`{source_label}:1: invalid date '{date_value}' (expected YYYY-MM-DD)`)
     }
     date_value = parsed.isoformat()
   }
   kind = as_string(fields, "type", date_value != "" ? "post" : "page").lower()
   ? kind != "page" && kind != "post" {
-    !^ ValueError(`{source_label}: type must be 'page' or 'post', got '{kind}'`)
+    !^ ValueError(`{source_label}:1: type must be 'page' or 'post', got '{kind}'`)
   }
   ? kind == "post" && date_value == "" {
-    !^ ValueError(`{source_label}: posts require a 'date' field (YYYY-MM-DD)`)
+    !^ ValueError(`{source_label}:1: posts require a 'date' field (YYYY-MM-DD)`)
   }
-  slug_source = as_string(fields, "slug", title)
-  ? slug_source == "" {
-    slug_source = title
+  slug_field = as_string(fields, "slug", "")
+  slug = ""
+  ? slug_field != "" {
+    slug = slugify(slug_field, "")
+  } : {
+    slug = slugify(title, "")
+    ? slug == "" {
+      slug = slugify(path.stem, "")
+    }
   }
-  slug = slugify(slug_source)
   ? slug == "" {
-    !^ ValueError(`{source_label}: could not derive a safe slug`)
+    !^ ValueError(`{source_label}:1: could not derive a safe slug`)
   }
   layout_default = kind == "post" ? "post.html" : "page.html"
   layout = as_string(fields, "layout", layout_default)
@@ -197,7 +208,7 @@ $$Page(
   } !! :ValueError {
     rel = path.name
   }
-  is_index = path.name == "index.md"
+  is_index = rel == "index.md"
   url = is_index ? "/" : `/{slug}/`
   known = {"title", "date", "slug", "tags", "draft", "layout", "type"}
   extra = DotDict({k: fields[k] | k <- fields.keys() ? k !<- known})

@@ -16,7 +16,7 @@ re-checked against Myna `main` at `2ca0826` (2026-10-24). The fixes ship in the
 **Severity:** painful (local development only)
 
 ```bash
-python3 -m pip install -e /home/joseph/Projects/myna
+python3 -m pip install -e /path/to/myna
 ```
 
 **Expected:** installs `myna-lang` and the `myna` console script.
@@ -30,7 +30,7 @@ error: Multiple top-level packages discovered in a flat-layout: ['myna', 'skills
 
 **Resolution:** `pyproject.toml` now declares `packages = ["myna", "myna.backends",
 "myna.frontends"]`. Verified with a clean `uv venv` + `uv pip install -e .`; the `myna`
-console script works. The `PYTHONPATH=/home/joseph/Projects/myna` fallback is no longer
+console script works. The `PYTHONPATH=/path/to/myna` fallback is no longer
 needed for local development.
 
 ## G2. No import mechanism for `.myna` application modules — fixed

@@ -51,9 +51,12 @@ $$SiteConfig(
   ^ value
 }
 
-@load_config(path_value:s="site.toml")->SiteConfig {
+@load_config(path_value:s="site.toml", required:b=F)->SiteConfig {
   path = Path(path_value)
   ? !path.exists() {
+    ? required {
+      !^ ValueError(`config file not found: {path_value}`)
+    }
     ^ SiteConfig(root=".")
   }
   !{
@@ -103,4 +106,56 @@ $$SiteConfig(
     ^ p
   }
   ^ Path(config.root) / p
+}
+
+@output_marker()->s {
+  ^ ".mynapress-output"
+}
+
+@path_within(path:Path, parent:Path)->b {
+  !{
+    path.resolve().relative_to(parent.resolve())
+    ^ T
+  } !! :ValueError {
+    ^ F
+  }
+}
+
+@assert_safe_output(config:SiteConfig, out_dir:Path, require_inside_root:b=F) {
+  root = Path(config.root).resolve()
+  out = out_dir.resolve()
+  ? path_within(root, out) {
+    !^ ValueError(`refusing to use '{out_dir}' as the output directory: it is the site root or contains it`)
+  }
+  sources = [
+    site_path(config, config.content_dir),
+    site_path(config, config.templates_dir),
+    site_path(config, config.static_dir)
+  ]
+  % source <- sources {
+    src = source.resolve()
+    ? path_within(out, src) || path_within(src, out) {
+      !^ ValueError(`refusing to use '{out_dir}' as the output directory: it overlaps '{source}'`)
+    }
+  }
+  ? require_inside_root && !path_within(out, root) {
+    !^ ValueError(`refusing to clean '{out_dir}': the output directory is outside the site root`)
+  }
+}
+
+@assert_output_target(out_dir:Path, action:s="replace", require_marker:b=F) {
+  ? out_dir.is_symlink() {
+    !^ ValueError(`refusing to {action} '{out_dir}': it is a symbolic link`)
+  }
+  ? !out_dir.exists() {
+    ^ 0
+  }
+  ? !out_dir.is_dir() {
+    !^ ValueError(`refusing to {action} '{out_dir}': it is not a directory`)
+  }
+  entries = @list(out_dir.iterdir())
+  ? (require_marker || #entries > 0) && !(out_dir / output_marker()).exists() {
+    !^ ValueError(`refusing to {action} '{out_dir}': it is not a MynaPress output directory (missing {output_marker()})`)
+  }
+  ^ 0
 }

@@ -52,8 +52,8 @@ $DotDict < dict {
     ^ N
   }
   s = @str(value).strip()
-  ? #s >= 10 {
-    s = s[:10]
+  ? re.fullmatch(_"\d{4}-\d{2}-\d{2}", s) === N {
+    ^ N
   }
   !{
     ^ datetime.strptime(s, "%Y-%m-%d").date()

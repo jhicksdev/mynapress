@@ -14,14 +14,22 @@ myna run src/main.myna clean [--config site.toml]
 
 Discovers Markdown, renders pages and posts, copies static files, builds tag pages and
 pagination, and writes feeds when `base_url` is configured. A full rebuild is performed
-every time; see [Limitations](/limitations/).
+every time; see [Limitations](/limitations/). The build is staged in a temporary sibling
+directory and swapped into place only after success, so a failed build leaves the previous
+output intact.
 
-- `--config PATH` — config file (default `site.toml`).
+- `--config PATH` — config file (default `site.toml`). An explicitly passed path must
+  exist; only an absent default `site.toml` falls back to defaults.
 - `--src PATH` — override `content_dir`. Relative paths are resolved from the current
   directory.
 - `--out PATH` — override `output_dir`. Relative paths are resolved from the current
   directory.
 - `--drafts` — include pages whose front matter says `draft: true`.
+
+The output directory may not be the site root, contain it, or overlap the content,
+template, or static directories. A non-empty existing output directory must contain the
+`.mynapress-output` marker written by MynaPress; otherwise the build refuses to replace it.
+An empty directory may be initialized by the first build.
 
 Output ends with a one-line summary such as:
 
@@ -29,8 +37,8 @@ Output ends with a one-line summary such as:
 Built 5 page(s), 3 post(s), 3 tag page(s), 1 asset(s) in 0.01s
 ```
 
-Content errors print `error: path/to/file.md:line: message` and exit 1. They do not dump a
-Python traceback.
+Content errors print `error: path/to/file.md:line: message` where a line is available and
+exit 1. They do not dump a Python traceback.
 
 ## `serve`
 
@@ -54,8 +62,10 @@ It refuses to overwrite an existing file and adds `-2`, `-3`, and so on instead.
 
 ## `clean`
 
-Removes the configured output directory and `.mynapress-cache.json` if present. It refuses
-to delete the site root or `/`.
+Removes the configured output directory and `.mynapress-cache.json` if present. The output
+must be inside the site root and must contain `.mynapress-output`; unmarked directories and
+outputs outside the root are refused. External output can be built, but must be removed
+manually.
 
 ## Exit codes
 
