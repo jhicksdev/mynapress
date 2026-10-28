@@ -18,8 +18,8 @@ MynaPress v0.1 is deliberately small. These are the known limitations, stated pl
   stretch goal; nothing pretends cross-target support exists.
 - **Small YAML subset.** Front matter supports scalars, booleans, integers, quoted
   strings, and inline lists only — no block mappings, multi-line strings, or anchors.
-- **CommonMark-ish, not CommonMark.** Tables, footnotes, definition lists, and smart
-  punctuation are out of scope. See [Markdown](/markdown/).
+- **CommonMark-ish, not CommonMark.** Footnotes, definition lists, and smart punctuation
+  are out of scope. See [Markdown](/markdown/).
 - **Fenced code needs a language to be highlighted.** Blocks with an info string use the
   vendored MynaShine highlighter; unlabelled and indented blocks stay plain. See
   [Markdown](/markdown/).

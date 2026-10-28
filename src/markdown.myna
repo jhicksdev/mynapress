@@ -247,6 +247,137 @@
   ^ re.match(_"^(\s*)([-+*]|\d+[.)])\s+(.*)$", line)
 }
 
+@split_table_row(line:s)->[s] {
+  text = line.strip()
+  cells = []
+  current = []
+  i = 0
+  n = #text
+  in_code = F
+  ? text.startswith("|") {
+    i = 1
+  }
+  %? i < n {
+    ch = text[i]
+    ? ch == "\\" && i + 1 < n && text[i + 1] == "|" {
+      current.append("|")
+      i += 2
+      ^>
+    }
+    ? ch == "`" {
+      in_code = !in_code
+      current.append(ch)
+      i += 1
+      ^>
+    }
+    ? ch == "|" && !in_code {
+      cells.append("".join(current).strip())
+      current = []
+      i += 1
+      ^>
+    }
+    current.append(ch)
+    i += 1
+  }
+  cells.append("".join(current).strip())
+  ? text.endswith("|") && !text.endswith("\\|") && #cells > 0 {
+    cells.pop()
+  }
+  ^ cells
+}
+
+@table_aligns(line:s)->A {
+  ? !("|" <- line) {
+    ^ N
+  }
+  cells = split_table_row(line)
+  ? #cells == 0 {
+    ^ N
+  }
+  aligns = []
+  % cell <- cells {
+    value = cell.strip()
+    ? re.fullmatch(_":?-+:?", value) === N {
+      ^ N
+    }
+    align = ""
+    ? value.startswith(":") && value.endswith(":") {
+      align = "center"
+    } :? value.startswith(":") {
+      align = "left"
+    } :? value.endswith(":") {
+      align = "right"
+    }
+    aligns.append(align)
+  }
+  ^ aligns
+}
+
+@table_start(lines:[s], index:i, end:i)->A {
+  ? index + 1 >= end {
+    ^ N
+  }
+  ? !("|" <- lines[index]) || is_blank(lines[index + 1]) {
+    ^ N
+  }
+  aligns = table_aligns(lines[index + 1])
+  ? aligns === N {
+    ^ N
+  }
+  ? #split_table_row(lines[index]) != #aligns {
+    ^ N
+  }
+  ^ aligns
+}
+
+@render_table(lines:[s], start:i, end:i, base_path:s="")->(s, i) {
+  aligns = table_start(lines, start, end)
+  headers = split_table_row(lines[start])
+  i = start + 2
+  rows = []
+  %? i < end {
+    line = lines[i]
+    ? is_blank(line) || is_block_starter(line) || !("|" <- line) {
+      ^!
+    }
+    cells = split_table_row(line)
+    row = []
+    j = 0
+    %? j < #headers {
+      row.append(j < #cells ? cells[j] : "")
+      j += 1
+    }
+    rows.append(row)
+    i += 1
+  }
+
+  head_cells = []
+  j = 0
+  %? j < #headers {
+    align_attr = aligns[j] == "" ? "" : ` style="text-align:{aligns[j]}"`
+    head_cells.append(`<th{align_attr}>{render_inline(headers[j], base_path)}</th>`)
+    j += 1
+  }
+  head = `<thead><tr>{"".join(head_cells)}</tr></thead>`
+
+  body = ""
+  ? #rows > 0 {
+    body_rows = []
+    % row <- rows {
+      body_cells = []
+      k = 0
+      %? k < #row {
+        align_attr = aligns[k] == "" ? "" : ` style="text-align:{aligns[k]}"`
+        body_cells.append(`<td{align_attr}>{render_inline(row[k], base_path)}</td>`)
+        k += 1
+      }
+      body_rows.append(`<tr>{"".join(body_cells)}</tr>`)
+    }
+    body = `<tbody>{"".join(body_rows)}</tbody>`
+  }
+  ^ `<table>{head}{body}</table>`, i
+}
+
 @is_list_line(line:s)->b {
   ^ list_match(line) !== N
 }
@@ -503,10 +634,17 @@
       ^>
     }
 
+    ? table_start(lines, i, end) !== N {
+      rendered, next_i = render_table(lines, i, end, base_path)
+      out.append(rendered)
+      i = next_i
+      ^>
+    }
+
     para_lines = [line]
     i += 1
     %? i < end {
-      ? is_blank(lines[i]) || is_block_starter(lines[i]) {
+      ? is_blank(lines[i]) || is_block_starter(lines[i]) || table_start(lines, i, end) !== N {
         ^!
       }
       para_lines.append(lines[i])

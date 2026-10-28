@@ -239,14 +239,32 @@ Implemented:
 - Inline code, fenced code (``` and ~~~, optional language class), indented code.
 - Fenced code with a language class is highlighted at build time by the vendored
   [MynaShine](#syntax-highlighting) highlighter.
+- Pipe tables with a header row, delimiter row, optional colon alignment, inline
+  formatting, and escaped pipes (`\|`).
 - Blockquotes, nested ordered/unordered lists, horizontal rules.
 - Links, images, scheme and email autolinks.
 - Raw HTML blocks/inline passthrough by design.
 - Text is HTML-escaped by default; code is always escaped and never interpreted.
 
-Out of scope: tables, footnotes, definition lists, task lists, smart punctuation, heading
-IDs, and full CommonMark edge cases. Raw HTML is trusted input; add your own sanitisation
-if content is untrusted.
+Out of scope: footnotes, definition lists, task lists, smart punctuation, heading IDs, and
+full CommonMark edge cases. Raw HTML is trusted input; add your own sanitisation if content
+is untrusted.
+
+### Tables
+
+Pipe tables use a header row, a delimiter row, and optional body rows:
+
+```markdown
+| Field | Type | Meaning |
+| :--- | :--- | ---: |
+| `title` | string | **Required.** |
+| `date` | `YYYY-MM-DD` | Publication date. |
+```
+
+Colons in the delimiter row align columns left, right, or centre. Cells are rendered as
+inline Markdown, so emphasis, links, and code spans work. Escape a literal pipe with `\|`;
+pipes inside code spans are preserved. A table ends at a blank line or another block
+element.
 
 ### Syntax highlighting
 
@@ -344,8 +362,8 @@ The `pages.yml` workflow runs the tests, builds the docs with the configured
 `base_url`/`base_path`, and deploys `build/` to GitHub Pages on pushes to `main`.
 
 Tests cover slugify (Unicode, punctuation, traversal), front matter (quoted values, lists,
-malformed input, unknown keys), Markdown block/inline forms and escaping, syntax
-highlighting, template filters and layouts, multi-level inheritance, missing variables and
+malformed input, unknown keys), Markdown block/inline forms and escaping, pipe tables,
+syntax highlighting, template filters and layouts, multi-level inheritance, missing variables and
 malformed tags, dates, pagination, config validation, explicit missing config, fixture
 builds, drafts, tags, expected output, output path safety, failed-build preservation, MIME
 types, 404s, and CLI cleanup.
@@ -391,8 +409,7 @@ modules are intentionally not vendored; see
   built, but remove it manually.
 - Flat post URLs; nested source folders do not affect URLs.
 - Python target only; no Node target.
-- Small YAML subset and CommonMark-ish Markdown; no tables, footnotes, or smart
-  punctuation.
+- Small YAML subset and CommonMark-ish Markdown; no footnotes or smart punctuation.
 - Syntax highlighting covers fenced blocks with a language class only. Unlabelled and
   indented code stay plain, and the vendored highlighter must be re-synced when MynaShine
   changes.

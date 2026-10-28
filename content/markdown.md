@@ -32,10 +32,26 @@ CommonMark, and the supported behaviour is tested in `tests/test_markdown.myna`.
 
 ## Not supported
 
-- Tables, footnotes, definition lists, task lists, smart punctuation, and heading IDs.
+- Footnotes, definition lists, task lists, smart punctuation, and heading IDs.
 - Full CommonMark edge cases (lazy list continuation, complex emphasis flanking, entity
   preservation, HTML block type 6/7 subtleties). The renderer aims for predictable output,
   not spec conformance.
+
+## Tables
+
+Pipe tables use a header row, a delimiter row, and optional body rows:
+
+```markdown
+| Field | Type | Meaning |
+| :--- | :--- | ---: |
+| `title` | string | **Required.** |
+| `date` | `YYYY-MM-DD` | Publication date. |
+```
+
+Colons in the delimiter row align columns left, right, or centre. Cells support inline
+Markdown (emphasis, links, and code spans). Escape a literal pipe with `\|`; pipes inside
+code spans are preserved. Missing cells are padded, extra cells are ignored, and a table
+ends at a blank line or another block element.
 
 ## Syntax highlighting
 

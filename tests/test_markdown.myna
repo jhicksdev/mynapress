@@ -78,6 +78,28 @@
   !? "<pre><code>**not bold**" <- plain, "unlabelled fence stays plain"
 }
 
+@test_tables {
+  html = render_markdown("| Name | Value | Note |\n| :--- | ---: | :---: |\n| **one** | 1 | `a|b` |\n| two | 2 | x \\| y |\n")
+  !? "<table><thead><tr>" <- html, "table header"
+  !? '<th style="text-align:left">Name</th>' <- html, "left alignment"
+  !? '<th style="text-align:right">Value</th>' <- html, "right alignment"
+  !? '<th style="text-align:center">Note</th>' <- html, "center alignment"
+  !? '<td style="text-align:left"><strong>one</strong></td>' <- html, "inline formatting in cell"
+  !? '<td style="text-align:center"><code>a|b</code></td>' <- html, "pipe inside code span"
+  !? "x | y" <- html, "escaped pipe becomes text"
+  !? "</tbody></table>" <- html, "table closes"
+}
+
+@test_table_rows_pad_and_stop {
+  html = render_markdown("| A | B |\n| --- | --- |\n| only |\n| 1 | 2 | 3 |\n\nAfter table.\n")
+  !? "<td>only</td><td></td>" <- html, "missing cells padded"
+  !? "<td>1</td><td>2</td></tr>" <- html, "extra cells ignored"
+  !? "</table>\n<p>After table.</p>" <- html, "table stops at blank line"
+  plain = render_markdown("a | b\nnot a delimiter\n")
+  !? "<table>" !<- plain, "pipe text without delimiter is not a table"
+  !? "a | b\nnot a delimiter" <- plain, "pipe paragraph preserved"
+}
+
 @test_blockquotes_and_rules {
   html = render_markdown("> quote\n> continued\n\n---\n")
   !? "<blockquote>" <- html, "blockquote"
