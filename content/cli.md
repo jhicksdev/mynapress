@@ -4,11 +4,15 @@ slug: cli
 ---
 
 ```bash
-myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]
-myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]
-myna run src/main.myna new "Post title" [--config site.toml]
-myna run src/main.myna clean [--config site.toml]
+mynapress build [--config site.toml] [--src content] [--out build] [--drafts]
+mynapress serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]
+mynapress new "Post title" [--config site.toml]
+mynapress clean [--config site.toml]
+mynapress --version
 ```
+
+From a source checkout, use `myna run src/main.myna <command> ...` instead of
+`mynapress <command> ...`.
 
 ## `build`
 
@@ -74,3 +78,5 @@ manually.
 - `2` — unknown command.
 
 Invalid flags and missing values also exit 1 with an actionable message.
+
+`--version` prints the MynaPress version and exits 0.

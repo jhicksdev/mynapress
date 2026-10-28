@@ -60,6 +60,28 @@ the repository `.venv`, then an installed `python3 -m myna`. For a local Myna ch
 set `MYNA_SRC=/path/to/myna`; if no Myna installation is found, the wrapper exits with a
 clear error.
 
+## Standalone bundle
+
+Each release ships a single-file executable zipapp. It requires Python 3.11 or newer, but
+does **not** need `myna-lang` installed:
+
+```bash
+curl -L -o mynapress.pyz \
+  https://github.com/jhicksdev/mynapress/releases/latest/download/mynapress.pyz
+chmod +x mynapress.pyz
+./mynapress.pyz build
+```
+
+On Windows, run it as `python mynapress.pyz build`. To put it on your `PATH`:
+
+```bash
+install -m 755 mynapress.pyz ~/.local/bin/mynapress
+mynapress build
+```
+
+The bundle is built with `myna bundle src/main.myna --zipapp`. Release assets include
+`SHA256SUMS`, which can be checked with `sha256sum -c SHA256SUMS`.
+
 ## Quick start
 
 ```bash
@@ -112,11 +134,15 @@ paginate = 10
 ## CLI
 
 ```bash
-myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]
-myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]
-myna run src/main.myna new "Post title" [--config site.toml]
-myna run src/main.myna clean [--config site.toml]
+mynapress build [--config site.toml] [--src content] [--out build] [--drafts]
+mynapress serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]
+mynapress new "Post title" [--config site.toml]
+mynapress clean [--config site.toml]
+mynapress --version
 ```
+
+From a source checkout, use `myna run src/main.myna <command> ...` instead of
+`mynapress <command> ...`.
 
 - `build` prints a concise summary: pages, posts, tag pages, assets, warnings, duration.
   It builds into a temporary sibling directory and swaps it into place only after a
@@ -127,6 +153,7 @@ myna run src/main.myna clean [--config site.toml]
 - `clean` removes a MynaPress output directory inside the site root and
   `.mynapress-cache.json`. It refuses output outside the site root and directories that
   were not created by MynaPress.
+- `--version` prints the version and exits 0.
 - Content and template errors exit non-zero with `error: file:line: message` where a line
   is available; config errors identify the config file. Raw content errors are not dumped
   as tracebacks.
@@ -359,7 +386,9 @@ myna run src/main.myna build
 
 CI runs the tests and builds the fixture and documentation sites on Python 3.11 and 3.12.
 The `pages.yml` workflow runs the tests, builds the docs with the configured
-`base_url`/`base_path`, and deploys `build/` to GitHub Pages on pushes to `main`.
+`base_url`/`base_path`, and deploys `build/` to GitHub Pages on pushes to `main`. Pushing a
+`v*` tag runs `release.yml`, which tests the project, builds `mynapress.pyz`, smoke-tests it
+without Myna, and publishes it with `SHA256SUMS`.
 
 Tests cover slugify (Unicode, punctuation, traversal), front matter (quoted values, lists,
 malformed input, unknown keys), Markdown block/inline forms and escaping, pipe tables,

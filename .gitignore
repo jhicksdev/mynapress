@@ -1,4 +1,5 @@
 build/
+dist/
 .venv/
 .mynapress-cache.json
 __pycache__/

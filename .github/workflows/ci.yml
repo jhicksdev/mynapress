@@ -29,3 +29,27 @@ jobs:
         run: python -m myna run src/main.myna build --config fixtures/site/site.toml
       - name: Build documentation site
         run: python -m myna run src/main.myna build
+
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Myna
+        run: python -m pip install myna-lang==0.5.0
+      - name: Build standalone bundle
+        run: |
+          mkdir -p dist
+          python -m myna bundle src/main.myna --zipapp -o dist/mynapress.pyz
+      - name: Verify bundle without Myna
+        run: |
+          python -m venv /tmp/bundle-venv
+          /tmp/bundle-venv/bin/python -c 'import importlib.util; assert importlib.util.find_spec("myna") is None'
+          /tmp/bundle-venv/bin/python dist/mynapress.pyz --version
+          /tmp/bundle-venv/bin/python dist/mynapress.pyz --help > /dev/null
+          rm -rf /tmp/bundle-build
+          /tmp/bundle-venv/bin/python dist/mynapress.pyz build --config fixtures/site/site.toml --out /tmp/bundle-build
+          test -f /tmp/bundle-build/index.html

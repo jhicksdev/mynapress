@@ -33,6 +33,25 @@ source .venv/bin/activate
 Alternatively, run `bin/mynapress` with `MYNA_SRC=/path/to/myna`; if no `myna` command is
 available, the wrapper exits with a clear error instead of guessing a local path.
 
+## Standalone bundle
+
+Release builds ship a single-file executable zipapp. It needs Python 3.11+ but not
+`myna-lang`:
+
+```bash
+curl -L -o mynapress.pyz \
+  https://github.com/jhicksdev/mynapress/releases/latest/download/mynapress.pyz
+chmod +x mynapress.pyz
+./mynapress.pyz build
+```
+
+On Windows, use `python mynapress.pyz build`. To install it as a command:
+
+```bash
+install -m 755 mynapress.pyz ~/.local/bin/mynapress
+mynapress build
+```
+
 ## A minimal site
 
 ```text

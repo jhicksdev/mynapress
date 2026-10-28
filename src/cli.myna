@@ -8,8 +8,20 @@
 <.site:{build_site}
 <.util:{slugify}
 
+VERSION = "0.2.0"
+
 @usage()->s {
-  ^ "MynaPress — a small static site generator written in Myna\n\nUsage:\n  myna run src/main.myna build [--config site.toml] [--src content] [--out build] [--drafts]\n  myna run src/main.myna serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]\n  myna run src/main.myna new \"Post title\" [--config site.toml]\n  myna run src/main.myna clean [--config site.toml]\n"
+  ^ `MynaPress {VERSION} — a small static site generator written in Myna
+
+Usage:
+  mynapress build [--config site.toml] [--src content] [--out build] [--drafts]
+  mynapress serve [--port 8000] [--watch] [--config site.toml] [--src content] [--out build] [--drafts]
+  mynapress new "Post title" [--config site.toml]
+  mynapress clean [--config site.toml]
+  mynapress --version
+
+From a source checkout, use: myna run src/main.myna <command> ...
+`
 }
 
 @take_value(args:[s], index:i, option:s)->s {
@@ -195,6 +207,10 @@
   }
   command = argv[0]
   rest = argv[1:]
+  ? command == "--version" || command == "-V" || command == "version" {
+    p(`mynapress {VERSION}`)
+    ^ 0
+  }
   !{
     ?? command {
       "build" => { ^ cmd_build(rest) }
