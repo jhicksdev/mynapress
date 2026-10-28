@@ -15,10 +15,11 @@ hidden.
 
 ## Status
 
-v0.1 targets Python 3.11+ only. Every source file declares `@target(py)`. There is no
-pretend JavaScript/Node support. Builds are full rebuilds, but each build is staged in a
-temporary directory and swapped into place only on success; see
-[Known limitations](#known-limitations).
+v0.1 targets Python 3.11+ only. Application files declare `@target(py)`; the vendored
+MynaShine core also declares `@target(py, js)` so it can be shared with its upstream
+project. There is no pretend JavaScript/Node support for MynaPress itself. Builds are full
+rebuilds, but each build is staged in a temporary directory and swapped into place only on
+success; see [Known limitations](#known-limitations).
 
 The documentation site in `content/` is built by MynaPress itself. Generated HTML is not
 committed; CI builds it.
@@ -26,12 +27,13 @@ committed; CI builds it.
 ## Requirements and installation
 
 - Python 3.11 or newer.
-- Myna 0.4.0+ with multi-file `.myna` module resolution (`myna run` must support sibling
-  imports such as `<.util:{slugify}`).
+- Myna 0.5.0+ with multi-file `.myna` module resolution (`myna run` must support sibling
+  imports such as `<.util:{slugify}`). The vendored highlighter is developed and tested
+  against 0.5.0.
 
 ```bash
-uv tool install myna-lang==0.4.0
-# or: pipx install myna-lang==0.4.0
+uv tool install myna-lang==0.5.0
+# or: pipx install myna-lang==0.5.0
 ```
 
 Clone this repository and run from its root:
@@ -231,14 +233,40 @@ Implemented:
 - ATX headings `#`–`######`, paragraphs, hard breaks.
 - Emphasis/strong with `*`, `**`, `_`, `__`, and `***`.
 - Inline code, fenced code (``` and ~~~, optional language class), indented code.
+- Fenced code with a language class is highlighted at build time by the vendored
+  [MynaShine](#syntax-highlighting) highlighter.
 - Blockquotes, nested ordered/unordered lists, horizontal rules.
 - Links, images, scheme and email autolinks.
 - Raw HTML blocks/inline passthrough by design.
 - Text is HTML-escaped by default; code is always escaped and never interpreted.
 
 Out of scope: tables, footnotes, definition lists, task lists, smart punctuation, heading
-IDs, syntax highlighting, and full CommonMark edge cases. Raw HTML is trusted input; add
-your own sanitisation if content is untrusted.
+IDs, and full CommonMark edge cases. Raw HTML is trusted input; add your own sanitisation
+if content is untrusted.
+
+### Syntax highlighting
+
+Fenced code blocks with an info string are highlighted by
+[MynaShine](https://github.com/jhicksdev/mynashine), which is vendored under
+`src/mynashine/` so MynaPress keeps its zero-dependency promise. Supported languages are
+Myna (`myna`, `mn`), Python, JavaScript, TOML, YAML, Bash/shell, HTML/XML, Markdown, and
+MynaPress templates. Unknown languages and malformed snippets degrade to escaped text;
+highlighting never fails a build.
+
+```myna
+@main {
+  p("highlighted")
+}
+```
+
+becomes a `<pre class="hl"><code class="language-myna">` block with `hl-*` token spans.
+Unlabelled and indented code blocks remain plain escaped `<pre><code>`.
+
+The stylesheet is the `mynashine` theme block between `/* mynashine:start */` and
+`/* mynashine:end */` in `assets/style.css`. Sites using a different stylesheet need the
+same block; generate it with `mynashine css --theme mynapress` or copy it from this
+repository. See [`src/mynashine/VENDORED.md`](src/mynashine/VENDORED.md) for the sync
+procedure when MynaShine changes.
 
 ## Configuration
 
@@ -304,11 +332,11 @@ myna run src/main.myna build
 CI runs the tests and builds the fixture and documentation sites on Python 3.11 and 3.12.
 
 Tests cover slugify (Unicode, punctuation, traversal), front matter (quoted values, lists,
-malformed input, unknown keys), Markdown block/inline forms and escaping, template filters
-and layouts, multi-level inheritance, missing variables and malformed tags, dates,
-pagination, config validation, explicit missing config, fixture builds, drafts, tags,
-expected output, output path safety, failed-build preservation, MIME types, 404s, and CLI
-cleanup.
+malformed input, unknown keys), Markdown block/inline forms and escaping, syntax
+highlighting, template filters and layouts, multi-level inheritance, missing variables and
+malformed tags, dates, pagination, config validation, explicit missing config, fixture
+builds, drafts, tags, expected output, output path safety, failed-build preservation, MIME
+types, 404s, and CLI cleanup.
 
 ### Architecture
 
@@ -338,6 +366,12 @@ loader workaround used during the original Myna 0.3.0 evaluation has been remove
 Myna 0.4.0 supports sibling `.myna` modules; the history and the four original
 reproductions are in `GAPS.md`.
 
+`src/mynashine/` is a vendored copy of MynaShine's portable highlighting core. It is the
+only third-party source in the repository, is MIT-licensed like MynaPress, and keeps
+build-time highlighting dependency-free. The CLI, filesystem, demo, and site-postprocessor
+modules are intentionally not vendored; see
+[`src/mynashine/VENDORED.md`](src/mynashine/VENDORED.md).
+
 ## Known limitations
 
 - Full rebuilds only; no incremental cache. Stale output is worse than a slow build.
@@ -345,11 +379,17 @@ reproductions are in `GAPS.md`.
   built, but remove it manually.
 - Flat post URLs; nested source folders do not affect URLs.
 - Python target only; no Node target.
-- Small YAML subset, CommonMark-ish Markdown, no tables/footnotes/smart punctuation/highlighting.
+- Small YAML subset and CommonMark-ish Markdown; no tables, footnotes, or smart
+  punctuation.
+- Syntax highlighting covers fenced blocks with a language class only. Unlabelled and
+  indented code stay plain, and the vendored highlighter must be re-synced when MynaShine
+  changes.
+- The highlighter CSS is a stylesheet block, not an automatic per-site asset; custom
+  stylesheets must include it.
 - Raw HTML is trusted and passed through.
 - Tag pages are not paginated.
 - No feeds/sitemap unless `base_url` is configured.
-- Requires Myna 0.4.0+ for native `.myna` module resolution.
+- Requires Myna 0.5.0+ for native `.myna` module resolution and the vendored highlighter.
 - No committed generated HTML. CI builds the docs.
 
 More detail is in the generated docs under `content/limitations.md` and in `GAPS.md`.

@@ -1,6 +1,7 @@
 @target(py)
 <re
 <.util:{html_escape}
+<.mynashine.highlight:{highlight_block}
 
 @escape_attr(value:s)->s {
   ^ html_escape(value)
@@ -393,12 +394,12 @@
       ? code != "" {
         code += "\n"
       }
-      cls = ""
       ? info != "" {
         lang = info.split()[0]
-        cls = ` class="language-{escape_attr(lang)}"`
+        out.append(highlight_block(code, lang))
+      } : {
+        out.append(`<pre><code>{html_escape(code)}</code></pre>`)
       }
-      out.append(`<pre><code{cls}>{html_escape(code)}</code></pre>`)
       ^>
     }
 

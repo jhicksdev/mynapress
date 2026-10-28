@@ -32,11 +32,29 @@ CommonMark, and the supported behaviour is tested in `tests/test_markdown.myna`.
 
 ## Not supported
 
-- Tables, footnotes, definition lists, task lists, smart punctuation, heading IDs, and
-  syntax highlighting.
+- Tables, footnotes, definition lists, task lists, smart punctuation, and heading IDs.
 - Full CommonMark edge cases (lazy list continuation, complex emphasis flanking, entity
   preservation, HTML block type 6/7 subtleties). The renderer aims for predictable output,
   not spec conformance.
+
+## Syntax highlighting
+
+Fenced code blocks with an info string are highlighted at build time by MynaShine, a
+small zero-dependency highlighter vendored under `src/mynashine/`. Myna (`myna`, `mn`),
+Python, JavaScript, TOML, YAML, Bash/shell, HTML/XML, Markdown, and MynaPress templates
+are supported. Unknown languages and malformed snippets fall back to escaped text, and
+highlighting never fails a build.
+
+```myna
+@main {
+  p("readable")
+}
+```
+
+renders as `<pre class="hl"><code class="language-myna">` with semantic `hl-*` spans.
+Unlabelled and indented code blocks stay plain. The theme lives between
+`/* mynashine:start */` and `/* mynashine:end */` in `assets/style.css`; a custom
+stylesheet needs that block to colour the tokens.
 
 ## Safety notes
 

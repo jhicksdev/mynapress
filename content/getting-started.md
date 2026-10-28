@@ -5,12 +5,12 @@ title: Getting started
 ## Requirements
 
 - Python 3.11 or newer.
-- Myna 0.4.0+ with native `.myna` module resolution. Install the language with `uv` or
-  `pipx`:
+- Myna 0.5.0+ with native `.myna` module resolution and the vendored MynaShine
+  highlighter. Install the language with `uv` or `pipx`:
 
   ```bash
-  uv tool install myna-lang==0.4.0
-  # or: pipx install myna-lang==0.4.0
+  uv tool install myna-lang==0.5.0
+  # or: pipx install myna-lang==0.5.0
   ```
 
 - MynaPress itself. Clone the repository and run it from its root. No package install is

@@ -39,12 +39,33 @@
 
 @test_fenced_and_indented_code {
   fenced = render_markdown("```python\nprint(\"<hi>\")\n```\n")
-  !? '<pre><code class="language-python">' <- fenced, "fence language"
-  !? "print(&quot;&lt;hi&gt;&quot;)" <- fenced, "fenced code escaped"
+  !? '<pre class="hl"><code class="language-python">' <- fenced, "fence language"
+  !? '<span class="hl-bi">print</span>' <- fenced, "python builtin highlighted"
+  !? "&lt;hi&gt;" <- fenced, "fenced code escaped"
+  !? "<hi>" !<- fenced, "raw angle brackets not emitted"
   tildes = render_markdown("~~~\nnot <b>html</b>\n~~~\n")
   !? "not &lt;b&gt;html&lt;/b&gt;" <- tildes, "tilde fence"
   indented = render_markdown("    indented <code>\n")
   !? "<pre><code>indented &lt;code&gt;" <- indented, "indented code"
+}
+
+@test_myna_code_block_highlighting {
+  html = render_markdown("```myna\n? x { ^1 }\n```\n")
+  !? '<pre class="hl"><code class="language-myna">' <- html, "myna language class"
+  !? '<span class="hl-kw">?</span>' <- html, "if sigil highlighted"
+  !? '<span class="hl-kw">^</span><span class="hl-num">1</span>' <- html, "return and number highlighted"
+  marked = render_markdown("```mn\n@fn(i:i)->s { ^`v={i}` }\n```\n")
+  !? '<code class="language-myna">' <- marked, "myna alias normalized"
+  !? '<span class="hl-decl">@</span><span class="hl-fn">fn</span>' <- marked, "declaration highlighted"
+  !? '<span class="hl-interp">{</span>' <- marked, "string interpolation highlighted"
+}
+
+@test_highlighting_is_lossless_and_fault_tolerant {
+  html = render_markdown("```myna\n\"unterminated <tag> & stuff\n```\n")
+  !? "unterminated &lt;tag&gt; &amp; stuff" <- html, "malformed code escaped losslessly"
+  !? "<tag>" !<- html, "raw tag not emitted from code"
+  plain = render_markdown("```\n**not bold**\n```\n")
+  !? "<pre><code>**not bold**" <- plain, "unlabelled fence stays plain"
 }
 
 @test_blockquotes_and_rules {
