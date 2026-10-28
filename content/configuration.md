@@ -92,6 +92,6 @@ but do not commit generated output.
 
 ## Caching
 
-There is no incremental cache in v0.1. Every build is a full rebuild. This is a deliberate
+There is no incremental cache in v0.2. Every build is a full rebuild. This is a deliberate
 correctness choice: stale cache output is worse than a fast rebuild. `clean` still removes
 `.mynapress-cache.json` if an older build created one.

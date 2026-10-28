@@ -3,7 +3,7 @@ title: Known limitations
 slug: limitations
 ---
 
-MynaPress v0.1 is deliberately small. These are the known limitations, stated plainly.
+MynaPress v0.2 is deliberately small. These are the known limitations, stated plainly.
 
 - **Full rebuilds only.** There is no incremental cache. A 500-page site is expected to
   build in a couple of seconds, but every build rewrites everything.

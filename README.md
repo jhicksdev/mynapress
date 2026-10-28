@@ -15,7 +15,7 @@ hidden.
 
 ## Status
 
-v0.1 targets Python 3.11+ only. Application files declare `@target(py)`; the vendored
+v0.2 targets Python 3.11+ only. Application files declare `@target(py)`; the vendored
 MynaShine core also declares `@target(py, js)` so it can be shared with its upstream
 project. There is no pretend JavaScript/Node support for MynaPress itself. Builds are full
 rebuilds, but each build is staged in a temporary directory and swapped into place only on
