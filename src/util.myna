@@ -111,6 +111,26 @@ $DotDict < dict {
   ^ b + p
 }
 
+@with_base_path(base:s, path:s)->s {
+  # Prefix site-root paths for sites served under a subpath (e.g. GitHub Pages).
+  # Absolute URLs, protocol-relative URLs, fragments, and relative paths are unchanged.
+  p = @str(path ?? "")
+  b = @str(base ?? "").rstrip("/")
+  ? b == "" || p == "" {
+    ^ p
+  }
+  ? p.startswith("//") || p.startswith("#") {
+    ^ p
+  }
+  ? re.match(_"^[A-Za-z][A-Za-z0-9+.-]*:", p) !== N {
+    ^ p
+  }
+  ? p.startswith("/") {
+    ^ b + p
+  }
+  ^ p
+}
+
 @output_relpath(url:s)->s {
   u = url.strip()
   ? "://" <- u {

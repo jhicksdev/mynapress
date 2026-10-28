@@ -44,6 +44,7 @@ Filters compose left-to-right:
 | `date` | Format an ISO date. Default `%b %d, %Y`; pass a `strftime` format. |
 | `upper` / `lower` | Change case. |
 | `slug` | Slugify with the same rules as content slugs. |
+| `url` | Prefix site-root paths with `site.base_path`; optional explicit base argument. |
 | `join` | Join a list; optional separator, default `", "`. |
 | `default` | Replace `None`, empty string, or empty list. |
 | `length` | Length of a string, list, or mapping. |
@@ -67,12 +68,20 @@ Unknown filters are template errors that name the template file and line.
 
 ```html
 {% for post in posts %}
-  <a href="{{ post.url }}">{{ post.title }}</a>
+  <a href="{{ post.url | url }}">{{ post.title }}</a>
 {% endfor %}
 ```
 
 Inside a loop, `loop.index` (1-based), `loop.index0`, `loop.first`, `loop.last`, and
 `loop.length` are available. Loops may nest. Empty or missing collections render nothing.
+
+Use the `url` filter for internal links when the site is served from a subpath. It is
+harmless when `base_path` is empty, so it is the recommended form everywhere:
+
+```html
+<link rel="stylesheet" href="{{ '/assets/style.css' | url }}">
+<a href="{{ '/' | url }}">Home</a>
+```
 
 ## Includes
 

@@ -22,7 +22,8 @@ rebuilds, but each build is staged in a temporary directory and swapped into pla
 success; see [Known limitations](#known-limitations).
 
 The documentation site in `content/` is built by MynaPress itself. Generated HTML is not
-committed; CI builds it.
+committed; CI builds it. It is published to
+[GitHub Pages](https://jhicksdev.github.io/mynapress/) from the `pages.yml` workflow.
 
 ## Requirements and installation
 
@@ -92,6 +93,7 @@ assets/
 title = "My Site"
 description = "Notes and things."
 base_url = "https://example.com"   # optional; enables RSS/sitemap/robots
+base_path = "/docs"                # optional; for subpath hosting
 paginate = 10
 ```
 
@@ -196,11 +198,12 @@ Templates are in `templates/` (configurable). Syntax at a glance:
 {{ page.title | escape }}
 {{ content | safe }}
 {{ page.date | date("%B %d, %Y") }}
+{{ page.url | url }}
 
 {% if page.tags %}tags{% elif page.type == "post" %}post{% else %}page{% endif %}
 
 {% for post in posts %}
-  <a href="{{ post.url }}">{{ post.title }}</a>
+  <a href="{{ post.url | url }}">{{ post.title }}</a>
   {% if not loop.last %},{% endif %}
 {% endfor %}
 
@@ -210,8 +213,9 @@ Templates are in `templates/` (configurable). Syntax at a glance:
 
 - Auto-escaping is on. `safe` opts out; `escape` explicitly escapes.
 - Filters compose left-to-right: `{{ "Hello World" | lower | slug }}`.
-- Filters: `escape`, `safe`, `date`, `upper`, `lower`, `slug`, `join`, `default`, `length`,
-  `truncate`.
+- Filters: `escape`, `safe`, `date`, `upper`, `lower`, `slug`, `url`, `join`, `default`,
+  `length`, `truncate`. `url` prefixes site-root paths with `site.base_path`; pass an
+  explicit base (`{{ page.url | url("/docs") }}`) to override it.
 - Conditionals support `{% if %}`, `{% elif %}`, `{% else %}`, `{% endif %}`.
 - Loops expose `loop.index`, `loop.index0`, `loop.first`, `loop.last`, `loop.length`.
 - Layout inheritance supports `{% extends "base.html" %}` and named
@@ -277,6 +281,7 @@ procedure when MynaShine changes.
 | `title` | string | required if the file exists |
 | `description` | string | `""` |
 | `base_url` | string | `""`; must be `http://` or `https://` when set |
+| `base_path` | string | `""`; URL path prefix for subpath hosting, e.g. `"/docs"` |
 | `author` | string | `""` |
 | `language` | string | `"en"` |
 | `paginate` | integer | `10`; `0` disables pagination |
@@ -287,9 +292,14 @@ procedure when MynaShine changes.
 
 Relative paths in `site.toml` resolve from the config file's directory. CLI `--src`/`--out`
 resolve from the current directory. Unknown keys, wrong types, a missing title, a bad
-`base_url`, negative pagination, and TOML errors fail with a clear message. If
-`site.toml` is absent and no `--config` was supplied, defaults are used; an explicit
+`base_url` or `base_path`, negative pagination, and TOML errors fail with a clear message.
+If `site.toml` is absent and no `--config` was supplied, defaults are used; an explicit
 `--config` path that does not exist is an error.
+
+When `base_path` is set, templates should prefix internal links with the `url` filter
+(`{{ post.url | url }}`), and MynaPress prefixes root-relative Markdown links and images
+automatically. The dev server serves the site under the same prefix. Absolute,
+protocol-relative, fragment, and relative URLs are left unchanged.
 
 Output directories are protected:
 
@@ -330,6 +340,8 @@ myna run src/main.myna build
 ```
 
 CI runs the tests and builds the fixture and documentation sites on Python 3.11 and 3.12.
+The `pages.yml` workflow runs the tests, builds the docs with the configured
+`base_url`/`base_path`, and deploys `build/` to GitHub Pages on pushes to `main`.
 
 Tests cover slugify (Unicode, punctuation, traversal), front matter (quoted values, lists,
 malformed input, unknown keys), Markdown block/inline forms and escaping, syntax

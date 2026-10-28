@@ -11,6 +11,36 @@ $SiteHandler < SimpleHTTPRequestHandler {
   }
 }
 
+$PrefixedSiteHandler < SiteHandler {
+  @init(*args, directory:s=".", base_path:s="") {
+    .base_path = base_path
+    ..init(*args, directory=directory)
+  }
+
+  @translate_path(path:s)->s {
+    prefix = .base_path
+    ? prefix != "" {
+      ? path.startswith(prefix + "/") {
+        path = path[#prefix:]
+      } : {
+        ^ ..translate_path("/__mynapress_not_found__")
+      }
+    }
+    ^ ..translate_path(path)
+  }
+
+  @do_GET {
+    prefix = .base_path
+    ? prefix != "" && (.path == "/" || .path == prefix) {
+      .send_response(301)
+      .send_header("Location", prefix + "/")
+      .end_headers()
+      ^ N
+    }
+    ..do_GET()
+  }
+}
+
 @watch_files(config:SiteConfig)->[Path] {
   root = Path(config.root)
   candidates = [
@@ -62,7 +92,7 @@ $SiteHandler < SimpleHTTPRequestHandler {
   result = build_site(config, drafts)
   print_build(result)
   out_dir = site_path(config, config.output_dir)
-  handler = functools.partial(SiteHandler, directory=@str(out_dir))
+  handler = functools.partial(PrefixedSiteHandler, directory=@str(out_dir), base_path=config.base_path)
   !{
     httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
   } !! e:OSError {
@@ -71,7 +101,8 @@ $SiteHandler < SimpleHTTPRequestHandler {
   actual_port = httpd.server_port
   thread = threading.Thread(target=httpd.serve_forever, daemon=T)
   thread.start()
-  p(`Serving {out_dir} at http://localhost:{actual_port}/`)
+  display_path = config.base_path == "" ? "/" : config.base_path + "/"
+  p(`Serving {out_dir} at http://localhost:{actual_port}{display_path}`)
   ? watch {
     p(`Watching for changes (Ctrl+C to stop)...`)
   }

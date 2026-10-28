@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ page.title }}{% endblock %} · {{ site.title }}</title>
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="{{ '/assets/style.css' | url }}">
 </head>
 <body>
-  <header><a href="/">{{ site.title }}</a></header>
+  <header><a href="{{ '/' | url }}">{{ site.title }}</a></header>
   <main>{% block content %}{% endblock %}</main>
   <footer>{{ site.author }}</footer>
 </body>

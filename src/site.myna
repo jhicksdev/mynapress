@@ -7,7 +7,7 @@
 <.content:{Page, discover, sort_posts}
 <.markdown:{render_markdown}
 <.template:{as_safe, render_template}
-<.util:{DotDict, html_escape, output_relpath, plain_summary, rfc822_date, slugify, url_for, xml_escape}
+<.util:{DotDict, html_escape, output_relpath, plain_summary, rfc822_date, slugify, url_for, with_base_path, xml_escape}
 
 $$BuildResult(
   pages:i,
@@ -126,7 +126,7 @@ $$BuildResult(
 @render_content_page(config:SiteConfig, page:Page, posts:[Page], all_posts:[Page], tag_infos:[A], page_number:i, total_pages:i, prev_url:s, next_url:s, tag_info:A=N, content_override:A=N)->s {
   templates = site_path(config, config.templates_dir)
   layout = resolve_layout(config, page.layout, ["page.html"], page.source)
-  markdown_html = content_override === N ? render_markdown(page.body) : content_override
+  markdown_html = content_override === N ? render_markdown(page.body, config.base_path) : content_override
   content = as_safe(markdown_html)
   ctx = site_context(config, page, content, posts, all_posts, page_number, total_pages, prev_url, next_url, tag_info, tag_infos)
   !{
@@ -137,7 +137,7 @@ $$BuildResult(
 }
 
 @fallback_index_html(config:SiteConfig, posts:[Page], heading:s)->s {
-  items = "".join([`<li><a href="{html_escape(post.url)}">{html_escape(post.title)}</a></li>` | post <- posts])
+  items = "".join([`<li><a href="{html_escape(with_base_path(config.base_path, post.url))}">{html_escape(post.title)}</a></li>` | post <- posts])
   ^ `<!doctype html><html lang="{html_escape(config.language)}"><head><meta charset="utf-8"><title>{html_escape(heading)}</title></head><body><h1>{html_escape(heading)}</h1><ul>{items}</ul></body></html>`
 }
 

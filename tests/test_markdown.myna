@@ -31,6 +31,17 @@
   !? '<a href="mailto:me@example.com">me@example.com</a>' <- html, "email autolink"
 }
 
+@test_links_respect_base_path {
+  html = render_markdown("[Guide](/guide/) ![Logo](/logo.png) [Ext](https://example.com/) [Rel](guide/)", "/docs")
+  !? '<a href="/docs/guide/">Guide</a>' <- html, "root link prefixed"
+  !? '<img src="/docs/logo.png" alt="Logo">' <- html, "root image prefixed"
+  !? '<a href="https://example.com/">Ext</a>' <- html, "absolute link untouched"
+  !? '<a href="guide/">Rel</a>' <- html, "relative link untouched"
+  nested = render_markdown("- [Guide](/guide/)\n- ![Logo](/logo.png)\n", "/docs")
+  !? 'href="/docs/guide/"' <- nested, "list link prefixed"
+  !? 'src="/docs/logo.png"' <- nested, "list image prefixed"
+}
+
 @test_raw_html_passthrough_and_hard_breaks {
   html = render_inline("<span class=\"x\">raw</span>  \nnext")
   !? '<span class="x">raw</span>' <- html, "raw inline HTML"
@@ -38,8 +49,7 @@
 }
 
 @test_fenced_and_indented_code {
-  fenced = render_markdown("```python\nprint(\"<hi>\")\n```\n")
-  !? '<pre class="hl"><code class="language-python">' <- fenced, "fence language"
+  fenced = render_markdown("```python\nprint(\"<hi>\")\n```\n")  !? '<pre class="hl"><code class="language-python">' <- fenced, "fence language"
   !? '<span class="hl-bi">print</span>' <- fenced, "python builtin highlighted"
   !? "&lt;hi&gt;" <- fenced, "fenced code escaped"
   !? "<hi>" !<- fenced, "raw angle brackets not emitted"

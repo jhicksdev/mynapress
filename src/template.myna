@@ -1,7 +1,7 @@
 @target(py)
 <re
 <pathlib:{Path}
-<.util:{DotDict, format_date, html_escape, safe_join, slugify, truncate_text}
+<.util:{DotDict, format_date, html_escape, safe_join, slugify, truncate_text, with_base_path}
 
 $Safe < str {
   @init(value:s) {
@@ -188,6 +188,22 @@ $$Token(kind:s, value:s, line:i)
   }
   ? name == "slug" {
     ^ slugify(value ?? "")
+  }
+  ? name == "url" {
+    base = ""
+    ? #args > 0 {
+      base = @str(eval_expr(args[0], ctx, filename, line))
+    } : {
+      site = ctx.get("site") ?? N
+      ? site !== N && site != "" {
+        bp = getattr(site, "base_path", N)
+        ? bp === N && site :? {s:A} {
+          bp = site.get("base_path", "")
+        }
+        base = @str(bp ?? "")
+      }
+    }
+    ^ with_base_path(base, @str(value ?? ""))
   }
   ? name == "join" {
     sep = ", "

@@ -115,6 +115,33 @@
   }
 }
 
+@test_base_path_build {
+  root = Path(tempfile.mkdtemp())
+  !{
+    site = root / "site"
+    (site / "content").mkdir(parents=True)
+    (site / "templates").mkdir()
+    (site / "site.toml").write_text('title = "Subpath Site"\nbase_url = "https://example.test/docs"\nbase_path = "/docs/"\n', encoding="utf-8")
+    (site / "content" / "index.md").write_text("---\ntitle: Home\n---\n\n[Guide](/guide/) [Ext](https://example.com/) ![Logo](/logo.png)\n", encoding="utf-8")
+    (site / "templates" / "base.html").write_text('<!doctype html><link rel="stylesheet" href="{{ \'/assets/style.css\' | url }}"><main>{% block content %}{% endblock %}</main>', encoding="utf-8")
+    (site / "templates" / "page.html").write_text('{% extends "base.html" %}{% block content %}{{ content | safe }}<a href="{{ \'/about/\' | url }}">About</a>{% endblock %}', encoding="utf-8")
+    config = load_config(@str(site / "site.toml"))
+    !? config.base_path == "/docs", "base_path normalized"
+    config.output_dir = @str(root / "out")
+    build_site(config)
+    html = (root / "out" / "index.html").read_text(encoding="utf-8")
+    !? 'href="/docs/assets/style.css"' <- html, "template asset prefixed"
+    !? '<a href="/docs/guide/">Guide</a>' <- html, "content link prefixed"
+    !? '<img src="/docs/logo.png" alt="Logo">' <- html, "content image prefixed"
+    !? 'href="/docs/about/"' <- html, "template page link prefixed"
+    !? 'href="https://example.com/"' <- html, "absolute link untouched"
+    sitemap = (root / "out" / "sitemap.xml").read_text(encoding="utf-8")
+    !? "https://example.test/docs/" <- sitemap, "absolute sitemap URL uses base_url"
+  } !: {
+    shutil.rmtree(root, ignore_errors=T)
+  }
+}
+
 @make_minimal_site(root:Path)->SiteConfig {
   site = root / "site"
   (site / "content").mkdir(parents=True)
@@ -240,6 +267,24 @@
     } !! :ValueError {
       _
     }
+    bad.write_text("title = \"X\"\nbase_path = \"docs\"\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "base_path without slash should fail"
+    } !! :ValueError {
+      _
+    }
+    bad.write_text("title = \"X\"\nbase_path = \"/docs?x=1\"\n", encoding="utf-8")
+    !{
+      load_config(@str(bad))
+      !? F, "base_path with query should fail"
+    } !! :ValueError {
+      _
+    }
+    bad.write_text("title = \"X\"\nbase_path = \"/docs/\"\n", encoding="utf-8")
+    !? load_config(@str(bad)).base_path == "/docs", "base_path trailing slash normalized"
+    bad.write_text("title = \"X\"\nbase_path = \"/\"\n", encoding="utf-8")
+    !? load_config(@str(bad)).base_path == "", "root base_path normalized to empty"
     missing = root / "missing.toml"
     !? load_config(@str(missing)).title == "MynaPress", "missing default config uses defaults"
     !{

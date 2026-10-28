@@ -6,7 +6,7 @@
   <p class="meta">{{ page.date | date("%B %d, %Y") }} · {{ page.reading_time }} min read</p>
   {{ content | safe }}
   {% if page.tags %}
-  <p class="tags">{% for tag in page.tags %}<a href="/tags/{{ tag | slug }}/">{{ tag }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  <p class="tags">{% for tag in page.tags %}<a href="{{ '/tags/' | url }}{{ tag | slug }}/">{{ tag }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>
   {% endif %}
 </article>
 {% endblock %}

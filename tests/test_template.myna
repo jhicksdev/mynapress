@@ -18,6 +18,13 @@
   !? render_source("{{ name | slug | upper }}", "test", Path("."), ctx, {}, []) == "HELLO-WORLD", "filters compose left-to-right"
 }
 
+@test_url_filter {
+  ctx = {"path": "/guide/", "abs": "https://example.com/x", "site": {"base_path": "/docs"}}
+  !? render_source("{{ path | url('/docs') }}", "test", Path("."), ctx, {}, []) == "/docs/guide/", "explicit base"
+  !? render_source("{{ abs | url('/docs') }}", "test", Path("."), ctx, {}, []) == "https://example.com/x", "absolute URL untouched"
+  !? render_source("{{ path | url }}", "test", Path("."), {"path": "/guide/", "site": {"base_path": "/docs"}}, {}, []) == "/docs/guide/", "site base_path fallback"
+}
+
 @test_if_elif_else {
   source = "{% if n > 2 %}big{% elif n == 2 %}two{% else %}small{% endif %}"
   !? render_source(source, "test", Path("."), {"n": 3}, {}, []) == "big", "if"

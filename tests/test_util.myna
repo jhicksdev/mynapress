@@ -35,6 +35,18 @@
   !? truncate_text("abcdef", 4, "...") == "abcd...", "custom suffix"
 }
 
+@test_with_base_path {
+  !? with_base_path("/docs", "/guide/") == "/docs/guide/", "root path prefixed"
+  !? with_base_path("/docs/", "/") == "/docs/", "trailing slash normalized"
+  !? with_base_path("", "/guide/") == "/guide/", "empty base leaves path"
+  !? with_base_path("/docs", "guide/") == "guide/", "relative path untouched"
+  !? with_base_path("/docs", "https://example.com/x") == "https://example.com/x", "absolute URL untouched"
+  !? with_base_path("/docs", "//cdn.example/x") == "//cdn.example/x", "protocol-relative untouched"
+  !? with_base_path("/docs", "#top") == "#top", "fragment untouched"
+  !? with_base_path("/docs", "mailto:a@b.c") == "mailto:a@b.c", "mail scheme untouched"
+  !? with_base_path("/docs", "") == "", "empty path untouched"
+}
+
 @test_dates {
   !? format_date("2026-10-24") == "Oct 24, 2026", "default format"
   !? format_date("2026-10-24", "%Y-%m-%d") == "2026-10-24", "custom format"

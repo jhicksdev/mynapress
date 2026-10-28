@@ -43,3 +43,40 @@
     shutil.rmtree(out, ignore_errors=T)
   }
 }
+
+@test_prefixed_server_serves_under_base_path {
+  out = Path(tempfile.mkdtemp())
+  !{
+    config = load_config(@str(Path(__file__).resolve().parent.parent / "fixtures" / "site" / "site.toml"))
+    config.output_dir = @str(out)
+    config.base_path = "/docs"
+    build_site(config)
+    handler = functools.partial(PrefixedSiteHandler, directory=@str(out), base_path="/docs")
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=T)
+    thread.start()
+    base = `http://127.0.0.1:{httpd.server_port}`
+    !{
+      !& root = urlopen(base + "/") {
+        !? root.status == 200, "root redirects to prefixed homepage"
+        !? root.url.endswith("/docs/"), "final URL uses base path"
+      }
+      !& css = urlopen(base + "/docs/assets/style.css") {
+        !? css.status == 200, "prefixed CSS status"
+        !? css.headers.get_content_type() == "text/css", "prefixed CSS MIME type"
+      }
+      !{
+        urlopen(base + "/assets/style.css")
+        !? F, "unprefixed path should 404"
+      } !! e:HTTPError {
+        !? e.code == 404, "unprefixed 404 status"
+      }
+    } !: {
+      httpd.shutdown()
+      httpd.server_close()
+      thread.join(timeout=2.0)
+    }
+  } !: {
+    shutil.rmtree(out, ignore_errors=T)
+  }
+}

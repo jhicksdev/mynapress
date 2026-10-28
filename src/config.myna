@@ -6,6 +6,7 @@ $$SiteConfig(
   title:s="MynaPress",
   description:s="",
   base_url:s="",
+  base_path:s="",
   author:s="",
   language:s="en",
   paginate:i=10,
@@ -28,7 +29,7 @@ $$SiteConfig(
   ? !(value :? s) {
     config_error(path, `config key '{key}' must be a string`)
   }
-  ? value.strip() == "" && key != "description" && key != "author" && key != "base_url" {
+  ? value.strip() == "" && key != "description" && key != "author" && key != "base_url" && key != "base_path" {
     config_error(path, `config key '{key}' must not be empty`)
   }
   ^ value.strip()
@@ -69,7 +70,7 @@ $$SiteConfig(
   } !! e:tomllib.TOMLDecodeError {
     !^ ValueError(`{path}: invalid TOML: {e}`)
   }
-  allowed = {"title", "description", "base_url", "author", "language", "paginate", "content_dir", "output_dir", "templates_dir", "static_dir"}
+  allowed = {"title", "description", "base_url", "base_path", "author", "language", "paginate", "content_dir", "output_dir", "templates_dir", "static_dir"}
   unknown = [k | k <- raw.keys() ? k !<- allowed]
   ? #unknown > 0 {
     !^ ValueError(`{path}: unknown config key(s): {@str(", ".join(unknown))}`)
@@ -82,6 +83,19 @@ $$SiteConfig(
   ? base_url != "" && !(base_url.startswith("http://") || base_url.startswith("https://")) {
     !^ ValueError(`{path}: base_url must start with http:// or https://`)
   }
+  base_path = require_str(raw, "base_path", "", path)
+  ? base_path != "" {
+    ? !base_path.startswith("/") || base_path.startswith("//") {
+      !^ ValueError(`{path}: base_path must start with a single '/'`)
+    }
+    ? "?" <- base_path || "#" <- base_path || " " <- base_path || "\\" <- base_path || "//" <- base_path {
+      !^ ValueError(`{path}: base_path must be a plain URL path prefix`)
+    }
+    base_path = base_path.rstrip("/")
+    ? base_path == "/" {
+      base_path = ""
+    }
+  }
   paginate = require_int(raw, "paginate", 10, path)
   root = @str(path.resolve().parent)
   _ = raw
@@ -89,6 +103,7 @@ $$SiteConfig(
     title=title,
     description=require_str(raw, "description", "", path),
     base_url=base_url,
+    base_path=base_path,
     author=require_str(raw, "author", "", path),
     language=require_str(raw, "language", "en", path),
     paginate=paginate,

@@ -9,6 +9,7 @@ types, and values and fails with a clear message instead of silently ignoring mi
 title = "My Site"
 description = "Notes and things."
 base_url = "https://example.com"
+base_path = "/docs"
 author = "Ada"
 language = "en"
 paginate = 10
@@ -23,6 +24,7 @@ static_dir = "assets"
 | `title` | string | required if the file exists | Site title. |
 | `description` | string | `""` | Used by feeds and available in templates. |
 | `base_url` | string | `""` | Must start with `http://` or `https://` when set. Enables RSS, sitemap, and robots. |
+| `base_path` | string | `""` | URL path prefix for subpath hosting, e.g. `/docs`. Empty means the site root. |
 | `author` | string | `""` | Available as `site.author`. |
 | `language` | string | `en` | HTML language and RSS language. |
 | `paginate` | integer | `10` | Posts per homepage page. `0` disables pagination. |
@@ -33,8 +35,29 @@ static_dir = "assets"
 
 Relative paths in `site.toml` are resolved relative to the config file's directory. CLI
 `--src` and `--out` overrides are resolved from the current working directory. Unknown
-keys are errors. Wrong types, a missing `title`, a bad `base_url`, negative `paginate`, and
-TOML syntax errors are errors.
+keys are errors. Wrong types, a missing `title`, a bad `base_url` or `base_path`, negative
+`paginate`, and TOML syntax errors are errors.
+
+## Subpath hosting
+
+Set `base_path` when the site is served from a subdirectory, such as a GitHub project page
+at `https://example.github.io/project/`:
+
+```toml
+base_url = "https://example.github.io/project"
+base_path = "/project"
+```
+
+Templates should prefix internal links with the `url` filter:
+
+```html
+<link rel="stylesheet" href="{{ '/assets/style.css' | url }}">
+<a href="{{ post.url | url }}">{{ post.title }}</a>
+```
+
+Root-relative Markdown links and images are prefixed automatically. Absolute URLs,
+protocol-relative URLs, fragments, and relative paths are unchanged. The dev server serves
+the site under the same prefix, so `myna run src/main.myna serve` prints the URL to open.
 
 If `site.toml` does not exist and no `--config` was supplied, MynaPress uses defaults
 (`title = "MynaPress"`, current directory, `content/`, `templates/`, `assets/`, `build/`,

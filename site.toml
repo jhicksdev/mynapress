@@ -1,5 +1,7 @@
 title = "MynaPress"
 description = "A small, dependency-free static site generator written entirely in Myna."
+base_url = "https://jhicksdev.github.io/mynapress"
+base_path = "/mynapress"
 author = "MynaPress contributors"
 language = "en"
 paginate = 10

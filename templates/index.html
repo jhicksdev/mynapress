@@ -9,10 +9,10 @@
   <h2>Posts</h2>
   <ul class="posts">
   {% for post in posts %}
-    <li><a href="{{ post.url }}">{{ post.title }}</a> <time>{{ post.date | date("%Y-%m-%d") }}</time></li>
+    <li><a href="{{ post.url | url }}">{{ post.title }}</a> <time>{{ post.date | date("%Y-%m-%d") }}</time></li>
   {% endfor %}
   </ul>
-  {% if paginator.has_prev %}<a href="{{ paginator.prev }}">Newer</a>{% endif %}
-  {% if paginator.has_next %}<a href="{{ paginator.next }}">Older</a>{% endif %}
+  {% if paginator.has_prev %}<a href="{{ paginator.prev | url }}">Newer</a>{% endif %}
+  {% if paginator.has_next %}<a href="{{ paginator.next | url }}">Older</a>{% endif %}
 </section>
 {% endblock %}

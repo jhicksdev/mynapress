@@ -1,6 +1,6 @@
 @target(py)
 <re
-<.util:{html_escape}
+<.util:{html_escape, with_base_path}
 <.mynashine.highlight:{highlight_block}
 
 @escape_attr(value:s)->s {
@@ -34,24 +34,24 @@
   ^ dest, title
 }
 
-@link_html(label:s, dest:s, title:s)->s {
+@link_html(label:s, dest:s, title:s, base_path:s="")->s {
   ? dest == "" {
-    ^ render_inline(label)
+    ^ render_inline(label, base_path)
   }
   title_attr = title == "" ? "" : ` title="{escape_attr(title)}"`
-  ^ `<a href="{escape_attr(dest)}"{title_attr}>{render_inline(label)}</a>`
+  ^ `<a href="{escape_attr(with_base_path(base_path, dest))}"{title_attr}>{render_inline(label, base_path)}</a>`
 }
 
-@image_html(alt:s, dest:s, title:s)->s {
+@image_html(alt:s, dest:s, title:s, base_path:s="")->s {
   ? dest == "" {
     ^ html_escape(alt)
   }
   title_attr = title == "" ? "" : ` title="{escape_attr(title)}"`
   plain_alt = re.sub(_"[*_`]", "", alt)
-  ^ `<img src="{escape_attr(dest)}" alt="{escape_attr(plain_alt)}"{title_attr}>`
+  ^ `<img src="{escape_attr(with_base_path(base_path, dest))}" alt="{escape_attr(plain_alt)}"{title_attr}>`
 }
 
-@render_inline(text:s)->s {
+@render_inline(text:s, base_path:s="")->s {
   out = []
   i = 0
   n = #text
@@ -117,7 +117,7 @@
         }
         ? k < n {
           dest, title = parse_link_target(text[j + 2:k])
-          out.append(image_html(text[i + 2:j], dest, title))
+          out.append(image_html(text[i + 2:j], dest, title, base_path))
           i = k + 1
           ^>
         }
@@ -154,7 +154,7 @@
         }
         ? k < n {
           dest, title = parse_link_target(text[j + 2:k])
-          out.append(link_html(text[i + 1:j], dest, title))
+          out.append(link_html(text[i + 1:j], dest, title, base_path))
           i = k + 1
           ^>
         }
@@ -189,7 +189,7 @@
       marker = text[i:i + 3]
       close = text.find(marker, i + 3)
       ? close > i + 3 {
-        out.append(`<em><strong>{render_inline(text[i + 3:close])}</strong></em>`)
+        out.append(`<em><strong>{render_inline(text[i + 3:close], base_path)}</strong></em>`)
         i = close + 3
         ^>
       }
@@ -199,7 +199,7 @@
       marker = text[i:i + 2]
       close = text.find(marker, i + 2)
       ? close > i + 2 && !text[i + 2].isspace() && !text[close - 1].isspace() {
-        out.append(`<strong>{render_inline(text[i + 2:close])}</strong>`)
+        out.append(`<strong>{render_inline(text[i + 2:close], base_path)}</strong>`)
         i = close + 2
         ^>
       }
@@ -213,7 +213,7 @@
         after = close + 1 >= n ? " " : text[close + 1]
         intraword = marker == "_" && (re.match(_"[A-Za-z0-9]", before) !== N) && (re.match(_"[A-Za-z0-9]", after) !== N)
         ? !intraword {
-          out.append(`<em>{render_inline(text[i + 1:close])}</em>`)
+          out.append(`<em>{render_inline(text[i + 1:close], base_path)}</em>`)
           i = close + 1
           ^>
         }
@@ -318,7 +318,7 @@
   ^ html
 }
 
-@render_list(lines:[s], start:i, end:i)->(s, i) {
+@render_list(lines:[s], start:i, end:i, base_path:s="")->(s, i) {
   first = list_match(lines[start])
   base_indent = #first.group(1)
   ordered = first.group(2)[-1] == "." || first.group(2)[-1] == ")"
@@ -354,7 +354,7 @@
       item_lines.append(nxt[cut:])
       i += 1
     }
-    inner, _ = render_blocks(item_lines, 0, #item_lines)
+    inner, _ = render_blocks(item_lines, 0, #item_lines, base_path)
     items.append(tighten(inner))
   }
   ? ordered && start_num != 1 {
@@ -366,7 +366,7 @@
   ^ `<{tag}>\n{body}</{tag}>`, i
 }
 
-@render_blocks(lines:[s], start:i, end:i)->(s, i) {
+@render_blocks(lines:[s], start:i, end:i, base_path:s="")->(s, i) {
   out = []
   i = start
   %? i < end {
@@ -407,7 +407,7 @@
     ? heading !== N {
       level = #heading.group(1)
       title = heading.group(2).rstrip("#").strip()
-      out.append(`<h{level}>{render_inline(title)}</h{level}>`)
+      out.append(`<h{level}>{render_inline(title, base_path)}</h{level}>`)
       i += 1
       ^>
     }
@@ -440,7 +440,7 @@
         quote_lines.append(stripped)
         i += 1
       }
-      inner, _ = render_blocks(quote_lines, 0, #quote_lines)
+      inner, _ = render_blocks(quote_lines, 0, #quote_lines, base_path)
       out.append(`<blockquote>\n{inner}\n</blockquote>`)
       ^>
     }
@@ -448,7 +448,7 @@
     ? is_list_line(line) {
       indent = #line - #line.lstrip()
       ? indent <= 3 {
-        rendered, next_i = render_list(lines, i, end)
+        rendered, next_i = render_list(lines, i, end, base_path)
         out.append(rendered)
         i = next_i
         ^>
@@ -513,14 +513,14 @@
       i += 1
     }
     para_text = "\n".join(para_lines)
-    out.append(`<p>{render_inline(para_text)}</p>`)
+    out.append(`<p>{render_inline(para_text, base_path)}</p>`)
   }
   ^ "\n".join(out), i
 }
 
-@render_markdown(text:s)->s {
+@render_markdown(text:s, base_path:s="")->s {
   normalized = text.replace("\r\n", "\n").replace("\r", "\n")
   lines = normalized.split("\n")
-  html, _ = render_blocks(lines, 0, #lines)
+  html, _ = render_blocks(lines, 0, #lines, base_path)
   ^ html
 }

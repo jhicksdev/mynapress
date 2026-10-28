@@ -5,27 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ page.title }}{% endblock %} · {{ site.title }}</title>
   <meta name="description" content="{{ site.description }}">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="{{ '/favicon.svg' | url }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ '/assets/style.css' | url }}">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="/">{{ site.title }}</a>
+    <a class="brand" href="{{ '/' | url }}">{{ site.title }}</a>
     <nav>
-      <a href="/getting-started/">Getting started</a>
-      <a href="/cli/">CLI</a>
-      <a href="/content-model/">Content</a>
-      <a href="/templates/">Templates</a>
-      <a href="/markdown/">Markdown</a>
-      <a href="/configuration/">Config</a>
-      <a href="/architecture/">Architecture</a>
+      <a href="{{ '/getting-started/' | url }}">Getting started</a>
+      <a href="{{ '/cli/' | url }}">CLI</a>
+      <a href="{{ '/content-model/' | url }}">Content</a>
+      <a href="{{ '/templates/' | url }}">Templates</a>
+      <a href="{{ '/markdown/' | url }}">Markdown</a>
+      <a href="{{ '/configuration/' | url }}">Config</a>
+      <a href="{{ '/architecture/' | url }}">Architecture</a>
     </nav>
   </header>
   <main>
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <p>{{ site.title }} · built with MynaPress. <a href="/limitations/">Known limitations</a></p>
+    <p>{{ site.title }} · built with MynaPress. <a href="{{ '/limitations/' | url }}">Known limitations</a></p>
   </footer>
 </body>
 </html>
